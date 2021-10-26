@@ -17,7 +17,6 @@
 package com.solace.aaron.restqueue;
 
 import com.solacesystems.jcsmp.Browser;
-import com.solacesystems.jcsmp.BrowserProperties;
 import com.solacesystems.jcsmp.BytesMessage;
 import com.solacesystems.jcsmp.BytesXMLMessage;
 import com.solacesystems.jcsmp.CapabilityType;
@@ -30,7 +29,6 @@ import com.solacesystems.jcsmp.JCSMPProperties;
 import com.solacesystems.jcsmp.JCSMPSession;
 import com.solacesystems.jcsmp.JCSMPStreamingPublishCorrelatingEventHandler;
 import com.solacesystems.jcsmp.JCSMPTransportException;
-import com.solacesystems.jcsmp.OperationNotSupportedException;
 import com.solacesystems.jcsmp.Queue;
 import com.solacesystems.jcsmp.SDTException;
 import com.solacesystems.jcsmp.SDTMap;
@@ -56,15 +54,13 @@ import org.apache.logging.log4j.Logger;
 
 public class SolaceRestQueueConsumer implements XMLMessageListener {
 
-    private static final int FLOW_TIMEOUT_SEC = 60;  // if this doesn't get an ACK or nextMsg in this time, we'll close the flow
-    
     
     private JCSMPSession session;
     private XMLMessageProducer producer;
     private XMLMessageConsumer consumer;
     private volatile boolean isShutdown = false;             // are we done?
 
-
+    private static final JCSMPFactory f = JCSMPFactory.onlyInstance();
     private static final Logger logger = LogManager.getLogger();  // log4j2, but could also use SLF4J, JCL, etc.
 
     
@@ -164,12 +160,12 @@ public class SolaceRestQueueConsumer implements XMLMessageListener {
     }
     
     void sendErrorResponse(BytesXMLMessage origMsg, int code, String reason) {
-        TextMessage replyMsg = JCSMPFactory.onlyInstance().createMessage(TextMessage.class);
+        TextMessage replyMsg = f.createMessage(TextMessage.class);
 //        replyMsg.setText(reason + ", sorry! \u1F613");
         StringBuilder sb = new StringBuilder().append(code).append(": ").append(reason).append(", sorry :-(\n");
         replyMsg.setText(sb.toString());
         try {
-            SDTMap map = JCSMPFactory.onlyInstance().createMap();
+            SDTMap map = f.createMap();
             map.putShort("JMS_Solace_HTTP_status_code",(short)code);
             map.putString("JMS_Solace_HTTP_reason_phrase",reason);
             replyMsg.setProperties(map);
@@ -182,9 +178,9 @@ public class SolaceRestQueueConsumer implements XMLMessageListener {
     }
 
     void sendOkResponse(BytesXMLMessage origMsg) {
-        BytesMessage replyMsg = JCSMPFactory.onlyInstance().createMessage(BytesMessage.class);
+        BytesMessage replyMsg = f.createMessage(BytesMessage.class);
         try {
-            SDTMap map = JCSMPFactory.onlyInstance().createMap();
+            SDTMap map = f.createMap();
             map.putShort("JMS_Solace_HTTP_status_code",(short)200);
             map.putString("JMS_Solace_HTTP_reason_phrase","OK");
             replyMsg.setProperties(map);
@@ -219,7 +215,7 @@ public class SolaceRestQueueConsumer implements XMLMessageListener {
         channelProps.setConnectRetriesPerHost(5);  // recommended settings
         // https://docs.solace.com/Solace-PubSub-Messaging-APIs/API-Developer-Guide/Configuring-Connection-T.htm
         properties.setProperty(JCSMPProperties.CLIENT_CHANNEL_PROPERTIES, channelProps);
-        session = JCSMPFactory.onlyInstance().createSession(properties, null, new SessionEventHandler() {
+        session = f.createSession(properties, null, new SessionEventHandler() {
             @Override
             public void handleEvent(SessionEventArgs event) {  // could be reconnecting, connection lost, etc.
                 System.out.println("### Session event: " + event);
@@ -259,22 +255,21 @@ public class SolaceRestQueueConsumer implements XMLMessageListener {
         
         
         
-        // Anonymous inner-class for MessageListener, this demonstrates the async threaded message callback
-        consumer = session.getMessageConsumer(this);
+        consumer = session.getMessageConsumer(this);  // I myself am my own listener (at bottom)
         
-        // < Allow: DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT
-        session.addSubscription(JCSMPFactory.onlyInstance().createTopic("POST/restQ/bind/>"));    // start a consumer flow
-        session.addSubscription(JCSMPFactory.onlyInstance().createTopic("POST/restQ/unbind/>"));  // close a flow
+        // MicroGateway: Allow: DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT
+        session.addSubscription(f.createTopic("POST/restQ/bind/>"));    // start a consumer flow
+        session.addSubscription(f.createTopic("POST/restQ/unbind/>"));  // close a flow
         
-        session.addSubscription(JCSMPFactory.onlyInstance().createTopic("GET/restQ/con/>"));      // consume a msg off a flowId
-        session.addSubscription(JCSMPFactory.onlyInstance().createTopic("DELETE/restQ/ack/>"));   // ack a msg off a flowId
+        session.addSubscription(f.createTopic("GET/restQ/con/>"));      // consume a msg off a flowId
+        session.addSubscription(f.createTopic("DELETE/restQ/ack/>"));   // ack a msg off a flowId
 
-        session.addSubscription(JCSMPFactory.onlyInstance().createTopic("GET/restQ/browse/>"));   // start a read-only browse session
-        session.addSubscription(JCSMPFactory.onlyInstance().createTopic("POST/restQ/browse/>"));  // start a read/delete browse session
-        session.addSubscription(JCSMPFactory.onlyInstance().createTopic("GET/restQ/next/>"));     // get next msg off a browseId
-        session.addSubscription(JCSMPFactory.onlyInstance().createTopic("DELETE/restQ/del/>"));   // delete a msg off a browseId
+        session.addSubscription(f.createTopic("GET/restQ/browse/>"));   // start a read-only browse session
+        session.addSubscription(f.createTopic("POST/restQ/browse/>"));  // start a read/delete browse session
+        session.addSubscription(f.createTopic("GET/restQ/next/>"));     // get next msg off a browseId
+        session.addSubscription(f.createTopic("DELETE/restQ/del/>"));   // delete a msg off a browseId
         
-        session.addSubscription(JCSMPFactory.onlyInstance().createTopic("HEAD/restQ/keepalive/>"));  // heartbeat to keep flow or browse alive
+        session.addSubscription(f.createTopic("HEAD/restQ/keepalive/>"));  // heartbeat to keep flow or browse alive
         consumer.start();
     }
 

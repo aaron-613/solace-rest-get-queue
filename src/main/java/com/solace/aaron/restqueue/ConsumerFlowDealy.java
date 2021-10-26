@@ -24,6 +24,7 @@ import org.apache.logging.log4j.Logger;
 
 public class ConsumerFlowDealy {
 
+    private static final int FLOW_TIMEOUT_SEC = 60;  // if this doesn't get an ACK or nextMsg in this time, we'll close the flow
     public static final int CONSUMER_FLOW_TRANSPORT_WINDOW_SIZE = 1;
 
     private final String queueName;
@@ -113,7 +114,7 @@ public class ConsumerFlowDealy {
             flowReceiver.stop();
             if (msg != null) unackedMessages.put(correlationId, msg);
     
-            future = pool.schedule(new QueueTimeoutTimer(), 60, TimeUnit.SECONDS);
+            future = pool.schedule(new QueueTimeoutTimer(), FLOW_TIMEOUT_SEC, TimeUnit.SECONDS);
     
             logger.debug(unackedMessages.toString());
             return msg;
