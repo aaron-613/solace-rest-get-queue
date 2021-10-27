@@ -7,49 +7,37 @@ import com.solacesystems.jcsmp.MapMessage;
 import com.solacesystems.jcsmp.StreamMessage;
 import com.solacesystems.jcsmp.TextMessage;
 import com.solacesystems.jcsmp.Topic;
+import java.net.URLDecoder;
+import java.nio.charset.Charset;
+import java.util.Arrays;
 import java.util.Base64;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.AbstractMap.SimpleImmutableEntry;
+import java.util.stream.Collectors;
 import javax.json.Json;
 import javax.json.JsonObjectBuilder;
 
-public class MessageUtils {
+public class UsefulUtils {
 
-    
-    
-/*    public static BytesXMLMessage copyMessage(BytesXMLMessage msg) {
-        BytesXMLMessage outMsg = JCSMPFactory.onlyInstance().createMessage(BytesXMLMessage.class);
-        if (msg.getApplicationMessageId() != null) {
-            outMsg.setApplicationMessageId(msg.getApplicationMessageId());
-        }
-        if (msg.getApplicationMessageType() != null) outMsg.setApplicationMessageType(msg.getApplicationMessageType());
-        if (msg.getCorrelationId() != null) outMsg.setCorrelationId(msg.getCorrelationId());
-        if (msg.getSequenceNumber() != null) outMsg.setSequenceNumber(msg.getSequenceNumber());
-        if (msg.getSenderId() != null) outMsg.setSenderId(msg.getSenderId());
-        if (msg.getSenderTimestamp() != null) outMsg.setSenderTimestamp(msg.getSenderTimestamp());
-        outMsg.setPriority(msg.getPriority());
-        if (msg.getReplyTo() != null) outMsg.setReplyTo(msg.getReplyTo());
-        
-        outMsg.writeAttachment(msg.dump().getBytes());//msg.getAttachmentByteBuffer().array());
-
-        try {
-            SDTMap map = JCSMPFactory.onlyInstance().createMap();
-            map.putShort("JMS_Solace_HTTP_status_code",(short)200);
-            if (outMsg.getApplicationMessageId() != null) map.putString("JMS_Solace_HTTP_Message_ID",outMsg.getApplicationMessageId());
-            outMsg.setProperties(map);
-        } catch (SDTException e) { }
-        return outMsg;
-    }
-*/    
+    private static final JCSMPFactory f = JCSMPFactory.onlyInstance();
     
     public static TextMessage sdkperfDumpMsgCopy(BytesXMLMessage msg) {
-        TextMessage outMsg = JCSMPFactory.onlyInstance().createMessage(TextMessage.class);
+        TextMessage outMsg = f.createMessage(TextMessage.class);
         outMsg.setText(msg.dump());
         return outMsg;
     }
-    
 
-    
     public static TextMessage jsonMsgCopy(BytesXMLMessage msg) {
-        
+        TextMessage outMsg = f.createMessage(TextMessage.class);
+        outMsg.setText(jsonMsgCopy2(msg));
+        return outMsg;
+    }
+
+    public static String jsonMsgCopy2(BytesXMLMessage msg) {
         JsonObjectBuilder job = Json.createObjectBuilder();
         job.add("destination",msg.getDestination().getName());
         //job.add("destinationType",msg.getDestination().getClass().getSimpleName());
@@ -80,31 +68,52 @@ public class MessageUtils {
         if (msg.getHTTPContentType() != null) job.add("httpContentType", msg.getHTTPContentType());
         
         if (msg instanceof TextMessage) {
-            job.add("payload", ((TextMessage)msg).getText());
             job.add("messageClass", "TextMessage");
+            job.add("payload", ((TextMessage)msg).getText());
         } else if (msg instanceof BytesMessage) {
-            job.add("payload", new String(Base64.getEncoder().encode(msg.getAttachmentByteBuffer().array())));
             job.add("messageClass", "BytesMessage");
+            job.add("payload", new String(Base64.getEncoder().encode(msg.getAttachmentByteBuffer().array())));
         } else if (msg instanceof MapMessage) {
-            job.add("payload", new String(Base64.getEncoder().encode(msg.getAttachmentByteBuffer().array())));
             job.add("messageClass", "MapMessage");
+            job.add("payload", new String(Base64.getEncoder().encode(msg.getAttachmentByteBuffer().array())));
         } else if (msg instanceof StreamMessage) {
-            job.add("payload", new String(Base64.getEncoder().encode(msg.getAttachmentByteBuffer().array())));
             job.add("messageClass", "StreamMessage");
-        } else {
             job.add("payload", new String(Base64.getEncoder().encode(msg.getAttachmentByteBuffer().array())));
+        } else {
             job.add("messageClass", msg.getClass().getName());
+            job.add("payload", new String(Base64.getEncoder().encode(msg.getAttachmentByteBuffer().array())));
         }
-//        JsonWriter jw = Json.
-        TextMessage outMsg = JCSMPFactory.onlyInstance().createMessage(TextMessage.class);
-        outMsg.setText(job.build().toString());
-        return outMsg;
+        return job.build().toString() + "\n";
     }
     
+    public static Map<String, List<String>> parseUrlParamQuery(String fullUrl) {
+        if (!fullUrl.contains("?")) return Collections.emptyMap();
+        String paramStr = fullUrl.split("\\?",2)[1];
+        return Arrays.stream(paramStr.split("&"))
+                .map(UsefulUtils::splitQueryParameter)
+                .collect(Collectors.groupingBy(SimpleImmutableEntry::getKey, LinkedHashMap::new, Collectors.mapping(Map.Entry::getValue, Collectors.toList())));
+    }
+    
+    private static final Charset UTF8 = Charset.forName("UTF-8");
+
+    public static SimpleImmutableEntry<String, String> splitQueryParameter(String it) {
+        final int idx = it.indexOf("=");
+        final String key = idx > 0 ? it.substring(0, idx) : it;
+        final String value = idx > 0 && it.length() > idx + 1 ? it.substring(idx + 1) : null;
+        return new SimpleImmutableEntry<>(
+            URLDecoder.decode(key, UTF8),
+            URLDecoder.decode(value, UTF8)
+        );
+    }
+
+    public boolean verifyParmas(Map<String, List<String>> urlParams, Set<String> accepted) {
+        return urlParams.keySet().equals(accepted);
+    }
+        
 
     
     
-    private MessageUtils() {
+    private UsefulUtils() {
         throw new AssertionError("don't instantiate");
     }
 }

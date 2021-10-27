@@ -46,7 +46,7 @@ public class BrowserFlowDealy {
     }
     
     
-    public static BrowserFlowDealy connectNewBrowse(JCSMPSession session, String queueName, String sessionId)
+    public static BrowserFlowDealy connectNewBrowse(JCSMPSession session, String queueName, String reqCorrId)
             throws OperationNotSupportedException, JCSMPErrorResponseException, JCSMPException{
         // configure the queue API object locally
         final Queue queue = JCSMPFactory.onlyInstance().createQueue(queueName);
@@ -58,10 +58,6 @@ public class BrowserFlowDealy {
         br_prop.setWaitTimeout(1000);
         try {
             Browser myBrowser = session.createBrowser(br_prop);
-//            if (!browsers.containsKey(queueName)) {
-//                browsers.put(queueName, new HashMap<>());
-//            }
-//            browsers.get(queueName).put(sessionId, myBrowser);
             return new BrowserFlowDealy(queueName, myBrowser);
         } catch (OperationNotSupportedException e) {  // not allowed to do this
             logger.error("Nope, couldn't do that!",e);

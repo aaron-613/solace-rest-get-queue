@@ -29,6 +29,7 @@ import com.solacesystems.jcsmp.JCSMPProperties;
 import com.solacesystems.jcsmp.JCSMPSession;
 import com.solacesystems.jcsmp.JCSMPStreamingPublishCorrelatingEventHandler;
 import com.solacesystems.jcsmp.JCSMPTransportException;
+import com.solacesystems.jcsmp.Message;
 import com.solacesystems.jcsmp.Queue;
 import com.solacesystems.jcsmp.SDTException;
 import com.solacesystems.jcsmp.SDTMap;
@@ -48,7 +49,11 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
+import javax.json.Json;
+import javax.json.JsonArrayBuilder;
+import javax.json.JsonObjectBuilder;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -64,15 +69,17 @@ public class SolaceRestQueueConsumer implements XMLMessageListener {
     private static final Logger logger = LogManager.getLogger();  // log4j2, but could also use SLF4J, JCL, etc.
 
     
-    private Map<String,ConsumerFlowDealy> flows = new HashMap<>();
+    private Map<String,String> queueToFlowIdMap = new HashMap<>();
+    private Map<String,ConsumerFlowDealy> queueToFlowMap = new HashMap<>();
     private Map<String,Map<String,Browser>> browsers = new HashMap<>();
 
     
-    private ReturnValue connectNewQueue(String queueName) {
+    private ReturnValue connectNewQueue(String queueName, String reqCorrId) {
         ConsumerFlowDealy cfd;
         try {
-            cfd = ConsumerFlowDealy.connectToQueue(session, queueName);
-            flows.put(queueName, cfd);
+            cfd = ConsumerFlowDealy.connectToQueue(session, queueName, reqCorrId);
+            queueToFlowIdMap.put(queueName,cfd.getFlowId());
+            queueToFlowMap.put(queueName, cfd);
             return new ReturnValue(200, "OK", true);
 /*        } catch (OperationNotSupportedException e) {  // not allowed to do this
             logger.error("Nope, couldn't do that!",e);
@@ -128,42 +135,24 @@ public class SolaceRestQueueConsumer implements XMLMessageListener {
     }
 */    
     
-    public Map<String, List<String>> splitQuery(String fullUrl) {
-        if (!fullUrl.contains("?")) return Collections.emptyMap();
-        String paramStr = fullUrl.split("\\?",2)[1];
-        return Arrays.stream(paramStr.split("&"))
-                .map(this::splitQueryParameter)
-                .collect(Collectors.groupingBy(SimpleImmutableEntry::getKey, LinkedHashMap::new, Collectors.mapping(Map.Entry::getValue, Collectors.toList())));
+        
+    
+    
+    
+    void sendErrorResponse(BytesXMLMessage origMsg, ErrorTypes errorType) {
+        sendErrorResponse(origMsg, errorType.getCode(), errorType.getMessage());
     }
-    
-    private static final Charset UTF8 = Charset.forName("UTF-8");
-
-    public SimpleImmutableEntry<String, String> splitQueryParameter(String it) {
-        final int idx = it.indexOf("=");
-        final String key = idx > 0 ? it.substring(0, idx) : it;
-        final String value = idx > 0 && it.length() > idx + 1 ? it.substring(idx + 1) : null;
-        return new SimpleImmutableEntry<>(
-            URLDecoder.decode(key, UTF8),
-            URLDecoder.decode(value, UTF8)
-        );
-    }
-
-
-    
-    
-    
-    
-
     
     void sendErrorResponse(BytesXMLMessage origMsg, ReturnValue returnValue) {
         sendErrorResponse(origMsg, returnValue.getHttpReturnCode(), returnValue.getHttpReturnReason());
     }
     
-    void sendErrorResponse(BytesXMLMessage origMsg, int code, String reason) {
+    void sendErrorResponse(BytesXMLMessage origMsg, int code, String reason) {  // reason or reason + message
         TextMessage replyMsg = f.createMessage(TextMessage.class);
-//        replyMsg.setText(reason + ", sorry! \u1F613");
-        StringBuilder sb = new StringBuilder().append(code).append(": ").append(reason).append(", sorry :-(\n");
-        replyMsg.setText(sb.toString());
+        JsonObjectBuilder job = Json.createObjectBuilder();
+        job.add("reason", reason);
+        job.add("code", code);
+        replyMsg.setText(job.build().toString() + "\n");
         try {
             SDTMap map = f.createMap();
             map.putShort("JMS_Solace_HTTP_status_code",(short)code);
@@ -177,8 +166,14 @@ public class SolaceRestQueueConsumer implements XMLMessageListener {
         }
     }
 
-    void sendOkResponse(BytesXMLMessage origMsg) {
-        BytesMessage replyMsg = f.createMessage(BytesMessage.class);
+    void sendOkResponse(BytesXMLMessage origMsg, String optionalPayload) {
+        Message replyMsg;
+        if (optionalPayload != null) {
+            replyMsg = f.createMessage(TextMessage.class);
+            ((TextMessage)replyMsg).setText(optionalPayload+"\n");
+        } else {  // empty response
+            replyMsg = f.createMessage(BytesMessage.class);
+        }
         try {
             SDTMap map = f.createMap();
             map.putShort("JMS_Solace_HTTP_status_code",(short)200);
@@ -268,8 +263,14 @@ public class SolaceRestQueueConsumer implements XMLMessageListener {
         session.addSubscription(f.createTopic("POST/restQ/browse/>"));  // start a read/delete browse session
         session.addSubscription(f.createTopic("GET/restQ/next/>"));     // get next msg off a browseId
         session.addSubscription(f.createTopic("DELETE/restQ/del/>"));   // delete a msg off a browseId
-        
+
+        session.addSubscription(f.createTopic("GET/restQ/getMsg/>"));        // get a specific msg by flowId and msgId
+        session.addSubscription(f.createTopic("GET/restQ/unacked/>"));    // get a list of unacked msgs based on flowId
+
         session.addSubscription(f.createTopic("HEAD/restQ/keepalive/>"));  // heartbeat to keep flow or browse alive
+        
+        session.addSubscription(f.createTopic("*/restQ/>"));            // suck it!  not interested
+
         consumer.start();
     }
 
@@ -291,16 +292,75 @@ public class SolaceRestQueueConsumer implements XMLMessageListener {
     }
     
     ////////////////////////////////////////////
+
+    
+    private void getMessage(RequestMessageObject rmo) {
+        String flowId = "";
+        String msgId = "";
+        String format = "json";
+        if (rmo.urlParams.get("flowId") != null) flowId = rmo.urlParams.get("flowId").get(0);
+        if (rmo.urlParams.get("msgId") != null) msgId = rmo.urlParams.get("msgId").get(0);
+        if (rmo.urlParams.get("format") != null) format = rmo.urlParams.get("format").get(0);
+        if (!queueToFlowMap.containsKey(rmo.queueName) || !queueToFlowIdMap.get(rmo.queueName).equals(flowId)) {
+            sendErrorResponse(rmo.requestMessage, ErrorTypes.INVALID_FLOW_ID);
+            return;
+        }
+        if (queueToFlowMap.get(rmo.queueName).unackedMessages.get(msgId) == null) {
+            sendErrorResponse(rmo.requestMessage, ErrorTypes.INVALID_MSG_ID);
+            return;
+        }
+        BytesXMLMessage msg = queueToFlowMap.get(rmo.queueName).unackedMessages.get(msgId);
+        try {
+            producer.sendReply(rmo.requestMessage, 
+                    format.equals("dump") ? UsefulUtils.sdkperfDumpMsgCopy(msg) : UsefulUtils.jsonMsgCopy(msg));
+        } catch (JCSMPException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+        }
+    }
+
+    private void getUnacked(RequestMessageObject rmo) {
+        String flowId = "";
+        if (rmo.urlParams.get("flowId") != null) flowId = rmo.urlParams.get("flowId").get(0);
+        if (!queueToFlowMap.containsKey(rmo.queueName) || !queueToFlowIdMap.get(rmo.queueName).equals(flowId)) {
+            sendErrorResponse(rmo.requestMessage, ErrorTypes.INVALID_FLOW_ID);
+            return;
+        }
+        JsonObjectBuilder job = Json.createObjectBuilder();
+        JsonArrayBuilder jab = Json.createArrayBuilder();
+        for (String msgId : queueToFlowMap.get(rmo.queueName).unackedMessages.keySet()) {
+            jab.add(msgId);
+        }
+        job.add("msgId", jab);
+        sendOkResponse(rmo.requestMessage, job.build().toString());
+    }
+    
+    private class RequestMessageObject {
+        
+        final String queueName;
+        final BytesXMLMessage requestMessage;
+        final String requestCorrelationId;
+        final Map<String, List<String>> urlParams;
+        
+        private RequestMessageObject(String queueName, BytesXMLMessage requestMessage, String requestCorrelationId,                 Map<String, List<String>> urlParams) {
+            this.queueName = queueName;
+            this.requestMessage = requestMessage;
+            this.requestCorrelationId = requestCorrelationId;
+            this.urlParams = Collections.unmodifiableMap(urlParams);
+        }
+    }
+    
+    
     
     @Override
     public void onReceive(BytesXMLMessage requestMessage) {
         //System.out.println(requestMessage.dump());
         if (requestMessage.getDestination() instanceof Queue) return;  // IGNORE! impossible!  lol
         String topic = requestMessage.getDestination().getName();
-        String parsedQueueName = topic.split("/",4)[3];  // will always work due to subscription, at least 3 levels
+        String queueName = topic.split("/",4)[3];  // will always work due to subscription, at least 3 levels
         // we're assuming that this app is using MicroGateway mode, which auto-populates correlation ID & some User Properties
-        String correlationId = requestMessage.getCorrelationId();
-        if (correlationId == null) {
+        String requestCorrelationId = requestMessage.getCorrelationId();
+        if (requestCorrelationId == null) {
             sendErrorResponse(requestMessage, 400, "no message Correlation ID present, use microgateway");
             return;
         }
@@ -308,9 +368,11 @@ public class SolaceRestQueueConsumer implements XMLMessageListener {
             sendErrorResponse(requestMessage, 400, "missing user properties, no map, use microgateway");
             return;
         }
-        Map<String, List<String>> params = Collections.emptyMap();
-        String parsedId = "";
-        String parsedFormat = "json";
+        Map<String, List<String>> urlParams = Collections.emptyMap();
+//        String flowId = null;
+//        String msgId = null;
+//        String format = "json";  // default
+        
         try {
             String fullUrl = requestMessage.getProperties().getString("JMS_Solace_HTTP_target_path_query_verbatim");
             if (fullUrl == null) {
@@ -318,39 +380,68 @@ public class SolaceRestQueueConsumer implements XMLMessageListener {
                 return;
             }
             try {
-                params = splitQuery(fullUrl);
+                urlParams = UsefulUtils.parseUrlParamQuery(fullUrl);
             } catch (RuntimeException e) {
                 sendErrorResponse(requestMessage, 400, "invalid URL parameter syntax");
                 return;
             }
-            System.out.println(params);
-            if (params.get("id") != null) parsedId = params.get("id").get(0);
-            if (params.get("format") != null) parsedFormat = params.get("format").get(0);
+            System.out.println("Parsed URL params: " + urlParams);
         } catch (SDTException e) {  // this really shouldn't happen!
             sendErrorResponse(requestMessage, handleJcsmpException(e));
+            e.printStackTrace();
+            logger.error(e);
+            assert false;
             return;
         }
-        if (topic.startsWith("GET/restQ/con/")) {
-            if (!flows.containsKey(parsedQueueName)) {
-                ReturnValue result = connectNewQueue(parsedQueueName);
-                if (!result.isSuccess()) {
-                    // send error response
-                    sendErrorResponse(requestMessage, result);
-                    return;
-                }
+        // now we start the topic demuxing process!!
+        
+        /////////////////////////////////////
+        // BIND TO A QUEUE
+        if (topic.startsWith("POST/restQ/bind/")) {
+            if (!urlParams.isEmpty()) {
+                sendErrorResponse(requestMessage, ErrorTypes.URL_PARAMS_NOT_EMPTY);
+                return;
+            }
+            if (queueToFlowIdMap.containsKey(queueName)) {
+                sendErrorResponse(requestMessage, 400, "queue " + queueName + " already has active flow");
+                return;
+            }
+            ReturnValue rv = connectNewQueue(queueName,requestCorrelationId);
+            if (rv.isSuccess()) {
+                sendOkResponse(requestMessage, "{flowId=\"" + queueToFlowMap.get(queueName).getFlowId() + "\"}");
+                return;
+            } else {
+                sendErrorResponse(requestMessage, rv);
+                return;
+            }
+        }
+        
+        ////////////////////////////
+        // CONSUME!
+        else if (topic.startsWith("GET/restQ/con/")) {
+            String flowId = "";
+            String format = "";
+            if (urlParams.get("flowId") != null) flowId = urlParams.get("flowId").get(0);
+            if (urlParams.get("format") != null) format = urlParams.get("format").get(0);  // optional
+            if (!queueToFlowMap.containsKey(queueName)) {
+                sendErrorResponse(requestMessage, 404, "queue consumer not active");
+                return;
+            } else if (!queueToFlowIdMap.get(queueName).equals(flowId)) {
+                sendErrorResponse(requestMessage, ErrorTypes.INVALID_FLOW_ID);
+                return;
             }
             try {
-                BytesXMLMessage msg = flows.get(parsedQueueName).getNextMessage(correlationId);
+                BytesXMLMessage msg = queueToFlowMap.get(queueName).getNextMessage(requestCorrelationId);
                 if (msg == null) {
                     sendErrorResponse(requestMessage, 404, "no messages");
                     return;
                 } else {
-                    if (parsedFormat.equals("dump")) {
-                        producer.sendReply(requestMessage, MessageUtils.sdkperfDumpMsgCopy(msg));
+                    if (format.equals("dump")) {
+                        producer.sendReply(requestMessage, UsefulUtils.sdkperfDumpMsgCopy(msg));
                     } else {
-                        producer.sendReply(requestMessage, MessageUtils.jsonMsgCopy(msg));
+                        producer.sendReply(requestMessage, UsefulUtils.jsonMsgCopy(msg));
                     }
-                    System.out.println(flows.get(parsedQueueName).unackedMessages.keySet());
+                    System.out.println(queueToFlowMap.get(queueName).unackedMessages.keySet());
                     /////////////////////////////////////////////////
                     //msg.ackMessage();
                     /////////////////////////////////////////////////
@@ -358,38 +449,44 @@ public class SolaceRestQueueConsumer implements XMLMessageListener {
             } catch (JCSMPException e) {
                 // TODO Auto-generated catch block
                 e.printStackTrace();
+                sendErrorResponse(requestMessage, handleJcsmpException(e));
             }
-        } else if (topic.startsWith("DELETE/restQ/ack/")) {  // ACKing a message!
-            if (!flows.containsKey(parsedQueueName)) {
+        }
+
+        //////////////////////////
+        // ACK consumed message
+        else if (topic.startsWith("DELETE/restQ/ack/")) {  // ACKing a message!
+            if (!queueToFlowMap.containsKey(queueName)) {
                 sendErrorResponse(requestMessage, 404, "queue consumer not active");
                 return;
             }
             String ackId = null;
-            if (params.get("ackId") != null) ackId = params.get("ackId").get(0);
+            if (urlParams.get("ackId") != null) ackId = urlParams.get("ackId").get(0);
             if (ackId == null) {
                 sendErrorResponse(requestMessage, 400, "missing URL param 'ackId' for ACK correlation");
                 return;
             }
-            if (flows.get(parsedQueueName).unackedMessages.get(ackId) == null) {
-                sendErrorResponse(requestMessage, 404, "unknown ackId '"+ackId+"' for queue "+parsedQueueName);
+            if (queueToFlowMap.get(queueName).unackedMessages.get(ackId) == null) {
+                sendErrorResponse(requestMessage, 404, "unknown ackId '"+ackId+"' for queue "+queueName);
                 return;
             }
             // else, good to go!
-            flows.get(parsedQueueName).unackedMessages.get(ackId).ackMessage();
-            System.out.println("Successfully ACKed "+flows.get(parsedQueueName).unackedMessages.get(ackId));
-            flows.get(parsedQueueName).unackedMessages.remove(ackId);
-            sendOkResponse(requestMessage);
-            
+            queueToFlowMap.get(queueName).unackedMessages.get(ackId).ackMessage();
+            System.out.println("Successfully ACKed "+queueToFlowMap.get(queueName).unackedMessages.get(ackId));
+            queueToFlowMap.get(queueName).unackedMessages.remove(ackId);
+            sendOkResponse(requestMessage,"");
+        }
             
             
             
 
-        } else if (topic.startsWith("GET/queueBro/")) {  // browser!
-            if (parsedId.isEmpty()) {
+        else if (topic.startsWith("GET/queueBro/")) {  // browser!
+            String flowId = "";
+            if (flowId.isEmpty()) {
                 sendErrorResponse(requestMessage, 400, "no unique \"id\" URL param included");
                 return;
             }
-            if (!browsers.containsKey(parsedQueueName)) {
+            if (!browsers.containsKey(queueName)) {
 //                ReturnValue result = connectNewBrowse(parsedQueueName);
 //                if (!result.isSuccess()) {
 //                    // send error response
@@ -400,6 +497,26 @@ public class SolaceRestQueueConsumer implements XMLMessageListener {
 
             }
                         
+        }
+        
+        ////////////////////////////
+        // GET MESSAGE!
+        else if (topic.startsWith("GET/restQ/getMsg/")) {
+            RequestMessageObject rmo = new RequestMessageObject(queueName, requestMessage, requestCorrelationId, urlParams);
+            getMessage(rmo);
+        }
+
+        ////////////////////////////
+        // LIST UNACKED MESSAGES!
+        else if (topic.startsWith("GET/restQ/unacked/")) {
+            RequestMessageObject rmo = new RequestMessageObject(queueName, requestMessage, requestCorrelationId, urlParams);
+            getUnacked(rmo);
+        }
+        
+        else {
+            System.err.println("RECEIVED A MESSAGE THAT WE DON'T SUBSCRIBE TO!!!");
+            System.err.println(requestCorrelationId);
+            System.err.println(UsefulUtils.jsonMsgCopy(requestMessage).getText());
         }
 
     }

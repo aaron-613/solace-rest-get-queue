@@ -3,6 +3,7 @@ package com.solace.aaron.restqueue;
 import com.solacesystems.jcsmp.BytesXMLMessage;
 import com.solacesystems.jcsmp.ClosedFacilityException;
 import com.solacesystems.jcsmp.ConsumerFlowProperties;
+import com.solacesystems.jcsmp.Endpoint;
 import com.solacesystems.jcsmp.FlowEventArgs;
 import com.solacesystems.jcsmp.FlowEventHandler;
 import com.solacesystems.jcsmp.FlowReceiver;
@@ -22,12 +23,13 @@ import java.util.concurrent.TimeUnit;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-public class ConsumerFlowDealy {
+public class ConsumerFlowDealy implements Flow {
 
-    private static final int FLOW_TIMEOUT_SEC = 60;  // if this doesn't get an ACK or nextMsg in this time, we'll close the flow
+    private static final int FLOW_TIMEOUT_SEC = 300;  // if this doesn't get an ACK or nextMsg in this time, we'll close the flow
     public static final int CONSUMER_FLOW_TRANSPORT_WINDOW_SIZE = 1;
 
     private final String queueName;
+    private String flowId;
     private final FlowReceiver flowReceiver;
     final Map<String,BytesXMLMessage> unackedMessages = new HashMap<>();  // corrID -> message
     private ScheduledFuture<?> future = null;
@@ -35,8 +37,9 @@ public class ConsumerFlowDealy {
     private static ScheduledExecutorService pool = Executors.newScheduledThreadPool(1, new DaemonThreadFactory("ConsFlow"));
     private static final Logger logger = LogManager.getLogger();  // log4j2, but could also use SLF4J, JCL, etc.
     
-    private ConsumerFlowDealy(String queueName, FlowReceiver flowReceiver) {
+    private ConsumerFlowDealy(String queueName, String flowId, FlowReceiver flowReceiver) {
         this.queueName = queueName;
+        this.flowId = flowId;
         this.flowReceiver = flowReceiver;
     }
 
@@ -44,12 +47,12 @@ public class ConsumerFlowDealy {
         return queueName;
     }
 
-//    public FlowReceiver getFlowReceiver() {
-//        return flowReceiver;
-//    }
+    public String getFlowId() {
+        return flowId;
+    }
     
     
-    public static ConsumerFlowDealy connectToQueue(JCSMPSession session, String queueName)
+    public static ConsumerFlowDealy connectToQueue(JCSMPSession session, String queueName, String reqCorrId)
             throws OperationNotSupportedException, JCSMPErrorResponseException, JCSMPException {
         // configure the queue API object locally
         final Queue queue = JCSMPFactory.onlyInstance().createQueue(queueName);
@@ -67,11 +70,11 @@ public class ConsumerFlowDealy {
                 public void handleEvent(Object source, FlowEventArgs event) {
                     // ### Type: 'FLOW_RECONNECTED', Info: 'OK', ResponseCode: '200', Exception: 'null'
                     // ### Type: 'FLOW_ACTIVE', Info: 'Flow becomes active', ResponseCode: '0', Exception: 'null'
-                    System.out.println("### Flow event: "+event);
+                    System.out.printf("### Flow event for '%s': %s%n",((FlowReceiver)source).getEndpoint(),event);
                 }
             });  // super basic blocking/sync queue receiver
             System.out.println("SUCCESS!");
-            return new ConsumerFlowDealy(queueName, flowQueueReceiver);
+            return new ConsumerFlowDealy(queueName, reqCorrId, flowQueueReceiver);
         } catch (OperationNotSupportedException e) {  // not allowed to do this
             logger.error("Nope, couldn't do that!",e);
             throw e;
@@ -102,9 +105,9 @@ public class ConsumerFlowDealy {
     }
     
     
-    public BytesXMLMessage getNextMessage(String correlationId) throws JCSMPException {
+    public BytesXMLMessage getNextMessage(String msgId) throws JCSMPException {
         // this next line should be impossible if using MicroGateway, each corrId is randomized
-        if (unackedMessages.containsKey(correlationId)) throw new IllegalArgumentException("correlation-id already exists");
+        if (unackedMessages.containsKey(msgId)) throw new IllegalArgumentException("correlation-id already exists");
         if (future != null) {
             future.cancel(true);
         }
@@ -112,7 +115,7 @@ public class ConsumerFlowDealy {
             flowReceiver.start();
             BytesXMLMessage msg = flowReceiver.receive(500);
             flowReceiver.stop();
-            if (msg != null) unackedMessages.put(correlationId, msg);
+            if (msg != null) unackedMessages.put(msgId, msg);
     
             future = pool.schedule(new QueueTimeoutTimer(), FLOW_TIMEOUT_SEC, TimeUnit.SECONDS);
     
@@ -120,7 +123,7 @@ public class ConsumerFlowDealy {
             return msg;
         } catch (ClosedFacilityException e) {  // this Flow is shut!
             e.printStackTrace();
-            return null;
+            throw e;
         }
     }
 
