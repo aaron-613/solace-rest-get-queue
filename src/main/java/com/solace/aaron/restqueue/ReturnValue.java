@@ -1,7 +1,5 @@
 package com.solace.aaron.restqueue;
 
-import org.checkerframework.checker.units.qual.h;
-
 public class ReturnValue {
 
     private final int httpReturnCode;

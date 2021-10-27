@@ -40,17 +40,10 @@ import com.solacesystems.jcsmp.XMLMessageConsumer;
 import com.solacesystems.jcsmp.XMLMessageListener;
 import com.solacesystems.jcsmp.XMLMessageProducer;
 import java.io.IOException;
-import java.net.URLDecoder;
-import java.nio.charset.Charset;
-import java.util.AbstractMap.SimpleImmutableEntry;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;
 import javax.json.Json;
 import javax.json.JsonArrayBuilder;
 import javax.json.JsonObjectBuilder;
@@ -460,20 +453,20 @@ public class SolaceRestQueueConsumer implements XMLMessageListener {
                 sendErrorResponse(requestMessage, 404, "queue consumer not active");
                 return;
             }
-            String ackId = null;
-            if (urlParams.get("ackId") != null) ackId = urlParams.get("ackId").get(0);
-            if (ackId == null) {
-                sendErrorResponse(requestMessage, 400, "missing URL param 'ackId' for ACK correlation");
+            String msgId = null;
+            if (urlParams.get("msgId") != null) msgId = urlParams.get("msgId").get(0);
+            if (msgId == null) {
+                sendErrorResponse(requestMessage, 400, "missing URL param 'msgId' for ACK correlation");
                 return;
             }
-            if (queueToFlowMap.get(queueName).unackedMessages.get(ackId) == null) {
-                sendErrorResponse(requestMessage, 404, "unknown ackId '"+ackId+"' for queue "+queueName);
+            if (queueToFlowMap.get(queueName).unackedMessages.get(msgId) == null) {
+                sendErrorResponse(requestMessage, 404, "unknown msgId '"+msgId+"' for queue "+queueName);
                 return;
             }
             // else, good to go!
-            queueToFlowMap.get(queueName).unackedMessages.get(ackId).ackMessage();
-            System.out.println("Successfully ACKed "+queueToFlowMap.get(queueName).unackedMessages.get(ackId));
-            queueToFlowMap.get(queueName).unackedMessages.remove(ackId);
+            queueToFlowMap.get(queueName).unackedMessages.get(msgId).ackMessage();
+            System.out.println("Successfully ACKed "+queueToFlowMap.get(queueName).unackedMessages.get(msgId));
+            queueToFlowMap.get(queueName).unackedMessages.remove(msgId);
             sendOkResponse(requestMessage,"");
         }
             

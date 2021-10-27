@@ -51,14 +51,14 @@ dependencies {
 
     //implementation group: 'javax.json', name: 'javax.json-api', version: '1.1.3'
     implementation group: 'org.glassfish', name: 'javax.json', version: '1.1.3'
-    implementation group: 'org.apache.httpcomponents', name: 'httpclient', version: '4.5.13'
+    //implementation group: 'org.apache.httpcomponents', name: 'httpclient', version: '4.5.13'
 
 
     // Use JUnit test framework.
-    testImplementation 'junit:junit:4.13'
+    //testImplementation 'junit:junit:4.13'
 
     // This dependency is used by the application.
-    implementation 'com.google.guava:guava:29.0-jre'
+    //implementation 'com.google.guava:guava:29.0-jre'
 }
 
 sourceSets {
@@ -71,5 +71,5 @@ sourceSets {
 
 application {
     // Define the main class for the application.
-    mainClass = 'com.solace.aaron.restqueue.App'
+    mainClass = 'com.solace.aaron.restqueue.SolaceRestQueueConsumer'
 }
