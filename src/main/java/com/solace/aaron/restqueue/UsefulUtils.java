@@ -101,8 +101,9 @@ public class UsefulUtils {
         final String key = idx > 0 ? it.substring(0, idx) : it;
         final String value = idx > 0 && it.length() > idx + 1 ? it.substring(idx + 1) : null;
         return new SimpleImmutableEntry<>(
-            URLDecoder.decode(key, UTF8),
-            URLDecoder.decode(value, UTF8)
+                key,value
+//            URLDecoder.decode(key, UTF8),
+//            URLDecoder.decode(value, UTF8)
         );
     }
 
