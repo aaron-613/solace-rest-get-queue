@@ -347,7 +347,8 @@ public class SolaceRestQueueConsumer implements XMLMessageListener {
     
     @Override
     public void onReceive(BytesXMLMessage requestMessage) {
-        //System.out.println(requestMessage.dump());
+        System.out.println(requestMessage.dump());
+//        System.out.println(">>> "+requestMessage.getDestination().getName());
         if (requestMessage.getDestination() instanceof Queue) return;  // IGNORE! impossible!  lol
         String topic = requestMessage.getDestination().getName();
         String queueName = topic.split("/",4)[3];  // will always work due to subscription, at least 3 levels
@@ -401,7 +402,7 @@ public class SolaceRestQueueConsumer implements XMLMessageListener {
             }
             ReturnValue rv = connectNewQueue(queueName,requestCorrelationId);
             if (rv.isSuccess()) {
-                sendOkResponse(requestMessage, "{flowId=\"" + queueToFlowMap.get(queueName).getFlowId() + "\"}");
+                sendOkResponse(requestMessage, "{ \"flowId\" : \"" + queueToFlowMap.get(queueName).getFlowId() + "\"}");
                 return;
             } else {
                 sendErrorResponse(requestMessage, rv);
@@ -431,6 +432,8 @@ public class SolaceRestQueueConsumer implements XMLMessageListener {
                 } else {
                     if (format.equals("dump")) {
                         producer.sendReply(requestMessage, UsefulUtils.sdkperfDumpMsgCopy(msg));
+                    } else if ("pretty".equals(format)) {
+                        producer.sendReply(requestMessage, UsefulUtils.jsonPrettyMsgCopy(msg));
                     } else {
                         producer.sendReply(requestMessage, UsefulUtils.jsonMsgCopy(msg));
                     }

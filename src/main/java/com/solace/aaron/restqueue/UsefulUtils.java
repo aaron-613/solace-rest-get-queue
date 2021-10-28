@@ -12,11 +12,14 @@ import com.solacesystems.jcsmp.SDTStream;
 import com.solacesystems.jcsmp.StreamMessage;
 import com.solacesystems.jcsmp.TextMessage;
 import com.solacesystems.jcsmp.Topic;
-import java.nio.charset.Charset;
+import java.io.StringWriter;
+import java.io.UnsupportedEncodingException;
+import java.net.URLDecoder;
 import java.util.AbstractMap.SimpleImmutableEntry;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -25,6 +28,10 @@ import java.util.stream.Collectors;
 import javax.json.Json;
 import javax.json.JsonArrayBuilder;
 import javax.json.JsonObjectBuilder;
+import javax.json.JsonStructure;
+import javax.json.JsonWriter;
+import javax.json.JsonWriterFactory;
+import javax.json.stream.JsonGenerator;
 
 public class UsefulUtils {
 
@@ -38,23 +45,28 @@ public class UsefulUtils {
 
     public static TextMessage jsonMsgCopy(BytesXMLMessage msg) {
         TextMessage outMsg = f.createMessage(TextMessage.class);
-        outMsg.setText(jsonMsgCopy2(msg));
+        outMsg.setText(jsonMsgCopy2(msg).toString() + "\n");
         return outMsg;
     }
 
-    public static String jsonMsgCopy2(BytesXMLMessage msg) {
+    public static TextMessage jsonPrettyMsgCopy(BytesXMLMessage msg) {
+        TextMessage outMsg = f.createMessage(TextMessage.class);
+        outMsg.setText(prettyPrint(jsonMsgCopy2(msg)) + "\n");
+        return outMsg;
+    }
+
+    public static JsonStructure jsonMsgCopy2(BytesXMLMessage msg) {
         JsonObjectBuilder job = Json.createObjectBuilder();
         // topic or queue
         job.add("destination",msg.getDestination().getName());
         job.add("destinationType", msg.getDestination() instanceof Topic ? "Topic" : "Queue");
 
         // metadata / headers
-        job.add("ackMessageId",msg.getAckMessageId());
         if (msg.getApplicationMessageId() != null) {
             job.add("applicationMessageId",msg.getApplicationMessageId());
         }
         if (msg.getApplicationMessageType() != null) job.add("applicationMessageType",msg.getApplicationMessageType());
-        if (msg.getConsumerIdList() != null) {
+        if (msg.getConsumerIdList() != null && !msg.getConsumerIdList().isEmpty()) {
             JsonArrayBuilder jab = Json.createArrayBuilder();
             for (Long l : msg.getConsumerIdList()) {
                 jab.add(l);
@@ -104,7 +116,7 @@ public class UsefulUtils {
             job.add("messageClass", msg.getClass().getName());
             job.add("payload", new String(Base64.getEncoder().encode(msg.getAttachmentByteBuffer().array())));
         }
-        return job.build().toString() + "\n";
+        return job.build();
     }
     
     private static String SDTMapToJson(SDTMap map) {
@@ -147,6 +159,34 @@ public class UsefulUtils {
         return job.build().toString();
     }
     
+    public static String prettyPrint(JsonStructure json) {
+        return jsonFormat(json, JsonGenerator.PRETTY_PRINTING);
+    }
+
+    public static String jsonFormat(JsonStructure json, String... options) {
+        StringWriter stringWriter = new StringWriter();
+        Map<String, Boolean> config = buildConfig(options);
+        JsonWriterFactory writerFactory = Json.createWriterFactory(config);
+        JsonWriter jsonWriter = writerFactory.createWriter(stringWriter);
+
+        jsonWriter.write(json);
+        jsonWriter.close();
+
+        return stringWriter.toString();
+    }
+    
+    private static Map<String, Boolean> buildConfig(String... options) {
+        Map<String, Boolean> config = new HashMap<String, Boolean>();
+
+        if (options != null) {
+            for (String option : options) {
+                config.put(option, true);
+            }
+        }
+
+        return config;
+    }
+    
     
     public static Map<String, List<String>> parseUrlParamQuery(String fullUrl) {
         if (!fullUrl.contains("?")) return Collections.emptyMap();
@@ -156,17 +196,19 @@ public class UsefulUtils {
                 .collect(Collectors.groupingBy(SimpleImmutableEntry::getKey, LinkedHashMap::new, Collectors.mapping(Map.Entry::getValue, Collectors.toList())));
     }
     
-    private static final Charset UTF8 = Charset.forName("UTF-8");
-
+    
     public static SimpleImmutableEntry<String, String> splitQueryParameter(String it) {
         final int idx = it.indexOf("=");
         final String key = idx > 0 ? it.substring(0, idx) : it;
         final String value = idx > 0 && it.length() > idx + 1 ? it.substring(idx + 1) : null;
-        return new SimpleImmutableEntry<>(
-                key,value
-//            URLDecoder.decode(key, UTF8),
-//            URLDecoder.decode(value, UTF8)
-        );
+        try {
+            return new SimpleImmutableEntry<>(
+                    URLDecoder.decode(key, "UTF-8"),
+                    URLDecoder.decode(value, "UTF-8")
+            );
+        } catch (UnsupportedEncodingException e) {
+            return new SimpleImmutableEntry<>(key,value);
+        }
     }
 
     public boolean verifyParmas(Map<String, List<String>> urlParams, Set<String> accepted) {
