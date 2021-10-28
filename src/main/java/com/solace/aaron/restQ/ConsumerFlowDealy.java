@@ -1,4 +1,4 @@
-package com.solace.aaron.restqueue;
+package com.solace.aaron.restQ;
 
 import com.solacesystems.jcsmp.BytesXMLMessage;
 import com.solacesystems.jcsmp.ClosedFacilityException;

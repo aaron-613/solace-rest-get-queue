@@ -1,4 +1,4 @@
-package com.solace.aaron.restqueue;
+package com.solace.aaron.restQ;
 
 public enum ErrorTypes {
 

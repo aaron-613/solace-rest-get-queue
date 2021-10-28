@@ -1,4 +1,4 @@
-package com.solace.aaron.restqueue;
+package com.solace.aaron.restQ;
 
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
