@@ -1,0 +1,59 @@
+
+
+
+
+setStringProperty("JMS_Solace_HTTP_method", "GET")
+setStringProperty("JMS_Solace_HTTP_target_path_query_verbatim", "some/path&query=val").
+
+
+
+^^^^^^^^^^^^^^^^^^ Start Message ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Destination:                            Topic 'POST/restQ/bind/q2'
+AppMessageID:                           ID:Solace-f36ecc285557d3e8
+CorrelationId:                          ID:Solace-f36ecc285557d3e8
+Class Of Service:                       USER_COS_1
+DeliveryMode:                           DIRECT
+Message Id:                             16
+ReplyTo:                                Topic '#P2P/v:aaron-router/_rest-9927675e3aeca6a0/POST/restQ/bind/q2'
+TimeToLive:                             30000
+User Property Map:                      4 entries
+  Key 'JMS_Solace_HTTP_field_Accept' (String): */*
+  Key 'JMS_Solace_HTTP_field_User-Agent' (String): curl/7.68.0
+  Key 'JMS_Solace_HTTP_method' (String): POST
+  Key 'JMS_Solace_HTTP_target_path_query_verbatim' (String): restQ/bind/q2
+
+
+^^^^^^^^^^^^^^^^^^ End Message ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+
+^^^^^^^^^^^^^^^^^^ Start Message ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Destination:                            Topic 'restQ/unbind/q3'
+AppMessageID:                           ID:Solace-1913fbbb008f3c71
+CorrelationId:                          ID:Solace-1913fbbb008f3c71
+Class Of Service:                       USER_COS_1
+DeliveryMode:                           DIRECT
+Message Id:                             14
+ReplyTo:                                Topic '#P2P/v:aaron-router/_rest-e84b5448e80a2ae9/restQ/unbind/q3'
+
+^^^^^^^^^^^^^^^^^^ End Message ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+in messaigng mode, with http://lcoalhost:9000/POST/restQ/....
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+REQUEST MESSAGE:
+Destination:                            Topic 'POST/restQ/unbind/q3'
+AppMessageID:                           ID:Solace-d463c5976cdbca7e
+CorrelationId:                          ID:Solace-d463c5976cdbca7e
+Class Of Service:                       USER_COS_1
+DeliveryMode:                           DIRECT
+Message Id:                             13
+ReplyTo:                                Topic '#P2P/v:aaron-router/_rest-11b11ea0b59ca015/POST/restQ/unbind/q3'
+HTTP Content Type:                      application/json
+Binary Attachment:                      len=23
+  1f 00 00 00 17 7b 20 22    61 66 64 73 22 3a 22 61    .....{."afds":"a
+  64 73 66 22 20 7d 00                                  dsf".}.
+
+
+
+

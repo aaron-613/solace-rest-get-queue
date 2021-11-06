@@ -55,7 +55,7 @@ public class BrowserFlowDealy {
         BrowserProperties br_prop = new BrowserProperties();
         br_prop.setEndpoint(queue);
         br_prop.setTransportWindowSize(1);
-        br_prop.setWaitTimeout(1000);
+//        br_prop.setWaitTimeout(1000);
         try {
             Browser myBrowser = session.createBrowser(br_prop);
             return new BrowserFlowDealy(queueName, myBrowser);
@@ -64,8 +64,8 @@ public class BrowserFlowDealy {
             throw e;
         } catch (JCSMPErrorResponseException e) {  // something else went wrong: queue not exist, queue shutdown, etc.
             logger.error("Nope, couldn't do that!",e);
-            JCSMPErrorResponseException e2 = (JCSMPErrorResponseException)e;
-            logger.error(JCSMPErrorResponseSubcodeEx.getSubcodeAsString(e2.getSubcodeEx()) + ": " + e.getResponsePhrase());
+//            JCSMPErrorResponseException e2 = (JCSMPErrorResponseException)e;
+            logger.error(JCSMPErrorResponseSubcodeEx.getSubcodeAsString(e.getSubcodeEx()) + ": " + e.getResponsePhrase());
             throw e;
         } catch (JCSMPException e) {
             logger.error("Nope, couldn't do that!",e);

@@ -2,6 +2,8 @@ package com.solace.aaron.restQ;
 
 public class RestQException extends Exception {
     
+    private static final long serialVersionUID = 1L;
+
     private ReturnValue rv;
 
     public RestQException() {

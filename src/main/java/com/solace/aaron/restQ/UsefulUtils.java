@@ -4,6 +4,7 @@ import com.solacesystems.common.util.ByteArray;
 import com.solacesystems.jcsmp.BytesMessage;
 import com.solacesystems.jcsmp.BytesXMLMessage;
 import com.solacesystems.jcsmp.Destination;
+import com.solacesystems.jcsmp.JCSMPErrorResponseException;
 import com.solacesystems.jcsmp.JCSMPFactory;
 import com.solacesystems.jcsmp.MapMessage;
 import com.solacesystems.jcsmp.SDTException;
@@ -12,10 +13,12 @@ import com.solacesystems.jcsmp.SDTStream;
 import com.solacesystems.jcsmp.StreamMessage;
 import com.solacesystems.jcsmp.TextMessage;
 import com.solacesystems.jcsmp.Topic;
+import java.io.StringReader;
 import java.io.StringWriter;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.util.AbstractMap.SimpleImmutableEntry;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.Collections;
@@ -27,7 +30,10 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import javax.json.Json;
 import javax.json.JsonArrayBuilder;
+import javax.json.JsonException;
+import javax.json.JsonObject;
 import javax.json.JsonObjectBuilder;
+import javax.json.JsonReader;
 import javax.json.JsonStructure;
 import javax.json.JsonWriter;
 import javax.json.JsonWriterFactory;
@@ -37,25 +43,9 @@ public class UsefulUtils {
 
     private static final JCSMPFactory f = JCSMPFactory.onlyInstance();
     
-    public static TextMessage sdkperfDumpMsgCopy(BytesXMLMessage msg) {
-        TextMessage outMsg = f.createMessage(TextMessage.class);
-        outMsg.setText(msg.dump());
-        return outMsg;
-    }
 
-    public static TextMessage jsonMsgCopy(BytesXMLMessage msg) {
-        TextMessage outMsg = f.createMessage(TextMessage.class);
-        outMsg.setText(jsonMsgCopy2(msg).toString() + "\n");
-        return outMsg;
-    }
-
-    public static TextMessage jsonPrettyMsgCopy(BytesXMLMessage msg) {
-        TextMessage outMsg = f.createMessage(TextMessage.class);
-        outMsg.setText(prettyPrint(jsonMsgCopy2(msg)) + "\n");
-        return outMsg;
-    }
-
-    public static JsonStructure jsonMsgCopy2(BytesXMLMessage msg) {
+    @SuppressWarnings("deprecation")
+    public static JsonStructure solMsgToJson(BytesXMLMessage msg) {
         JsonObjectBuilder job = Json.createObjectBuilder();
         // topic or queue
         job.add("destination",msg.getDestination().getName());
@@ -86,7 +76,7 @@ public class UsefulUtils {
         if (msg.getExpiration() > 0) job.add("expiration", msg.getExpiration());
         if (msg.getHTTPContentEncoding() != null) job.add("httpContentEncoding", msg.getHTTPContentEncoding());
         if (msg.getHTTPContentType() != null) job.add("httpContentType", msg.getHTTPContentType());
-        if (msg.getMessageId() != null) job.add("mesageId", msg.getMessageId());
+        if (msg.getMessageId() != null) job.add("mesageId", msg.getMessageId());  // deprecated, but still dump it out
         job.add("priority",msg.getPriority());
         if (msg.getRedelivered()) job.add("redelivered", msg.getRedelivered());
         if (msg.isReplyMessage()) job.add("replyMessage", msg.isReplyMessage());
@@ -119,7 +109,7 @@ public class UsefulUtils {
         return job.build();
     }
     
-    private static String SDTMapToJson(SDTMap map) {
+    static JsonStructure SDTMapToJson(SDTMap map) {
         JsonObjectBuilder job = Json.createObjectBuilder();
         try {
             for (String key : map.keySet()) {
@@ -127,7 +117,9 @@ public class UsefulUtils {
                 if (o instanceof String) {
                     job.add(key, (String)o);
                 } else if (o instanceof SDTMap) {
+                    job.add(key, SDTMapToJson((SDTMap)o));
                 } else if (o instanceof SDTStream) {
+                    job.add(key, SDTStreamToJson((SDTStream)o));
                 } else if (o instanceof Double) {
                     job.add(key, (Double)o);
                 } else if (o instanceof Float) {
@@ -143,7 +135,7 @@ public class UsefulUtils {
                 } else if (o instanceof Byte) {
                     job.add(key, (Byte)o);
                 } else if (o instanceof ByteArray) {
-                    System.err.println("Cannot convert bytearray: "+map);
+                    job.add(key, new String(Base64.getEncoder().encode(((ByteArray)o).asBytes())));
                 } else if (o instanceof Character) {
                     job.add(key, (Character)o);
                 } else if (o instanceof Destination) {
@@ -156,48 +148,102 @@ public class UsefulUtils {
         } catch (SDTException e) {
             e.printStackTrace();
         }
-        return job.build().toString();
-    }
-    
-    public static String prettyPrint(JsonStructure json) {
-        return jsonFormat(json, JsonGenerator.PRETTY_PRINTING);
+        return job.build();
     }
 
-    public static String jsonFormat(JsonStructure json, String... options) {
-        StringWriter stringWriter = new StringWriter();
-        Map<String, Boolean> config = buildConfig(options);
+    static JsonStructure SDTStreamToJson(SDTStream stream) {
+        JsonArrayBuilder jab = Json.createArrayBuilder();
+        try {
+            while (stream.hasRemaining()) {
+                Object o = stream.read();
+                if (o instanceof String) {
+                    jab.add((String)o);
+                } else if (o instanceof SDTMap) {
+                    jab.add(SDTMapToJson((SDTMap)o));
+                } else if (o instanceof SDTStream) {
+                    jab.add(SDTStreamToJson((SDTStream)o));
+                } else if (o instanceof Double) {
+                    jab.add((Double)o);
+                } else if (o instanceof Float) {
+                    jab.add((Float)o);
+                } else if (o instanceof Integer) {
+                    jab.add((Integer)o);
+                } else if (o instanceof Long) {
+                    jab.add((Long)o);
+                } else if (o instanceof Boolean) {
+                    jab.add((Boolean)o);
+                } else if (o instanceof Short) {
+                    jab.add((Short)o);
+                } else if (o instanceof Byte) {
+                    jab.add((Byte)o);
+                } else if (o instanceof ByteArray) {
+                    jab.add(new String(Base64.getEncoder().encode(((ByteArray)o).asBytes())));
+                } else if (o instanceof Character) {
+                    jab.add((Character)o);
+                } else if (o instanceof Destination) {
+                    jab.add(((Destination)o).getName());
+                } else {
+                    System.err.println("Unhandled type "+o.getClass().getName()+"!!");
+                }
+            }
+            
+        } catch (SDTException e) {
+            e.printStackTrace();
+        }
+        return jab.build();
+    }
+
+    static String prettyPrint(JsonStructure json) {
+        //Map<String, Boolean> config = buildConfig(JsonGenerator.PRETTY_PRINTING);
+        Map<String, Object> config = new HashMap<>();
+        config.put(JsonGenerator.PRETTY_PRINTING, true);
         JsonWriterFactory writerFactory = Json.createWriterFactory(config);
+        StringWriter stringWriter = new StringWriter();
         JsonWriter jsonWriter = writerFactory.createWriter(stringWriter);
-
         jsonWriter.write(json);
         jsonWriter.close();
-
         return stringWriter.toString();
     }
     
-    private static Map<String, Boolean> buildConfig(String... options) {
+    static Map<String, Boolean> buildConfig(String... options) {
         Map<String, Boolean> config = new HashMap<String, Boolean>();
-
         if (options != null) {
             for (String option : options) {
                 config.put(option, true);
             }
         }
-
         return config;
     }
     
-    
-    public static Map<String, List<String>> parseUrlParamQuery(String fullUrl) {
+    static Map<String, List<String>> parsePayloadParamQuery(String payload) {
+        JsonReader reader = Json.createReader(new StringReader(payload));
+        Map<String, List<String>> retMap = new HashMap<>();
+        try {
+            JsonObject json = reader.readObject();
+            for (String key : json.keySet()) {
+                if (!retMap.containsKey(key)) {
+                    retMap.put(key, new ArrayList<>());
+                }
+                retMap.get(key).add(json.getString(key));
+            }
+        } catch (JsonException e) {
+            
+        } catch (ClassCastException e) {
+            
+        }
+        return retMap;
+    }
+
+    static Map<String, List<String>> parseUrlParamQuery(String fullUrl) {
         if (!fullUrl.contains("?")) return Collections.emptyMap();
         String paramStr = fullUrl.split("\\?",2)[1];
         return Arrays.stream(paramStr.split("&"))
                 .map(UsefulUtils::splitQueryParameter)
                 .collect(Collectors.groupingBy(SimpleImmutableEntry::getKey, LinkedHashMap::new, Collectors.mapping(Map.Entry::getValue, Collectors.toList())));
     }
-    
-    
-    public static SimpleImmutableEntry<String, String> splitQueryParameter(String it) {
+
+
+    private static SimpleImmutableEntry<String, String> splitQueryParameter(String it) {
         final int idx = it.indexOf("=");
         final String key = idx > 0 ? it.substring(0, idx) : it;
         final String value = idx > 0 && it.length() > idx + 1 ? it.substring(idx + 1) : null;
@@ -211,11 +257,52 @@ public class UsefulUtils {
         }
     }
 
-    public boolean verifyParmas(Map<String, List<String>> urlParams, Set<String> accepted) {
+    boolean verifyParmas(Map<String, List<String>> urlParams, Set<String> accepted) {
         return urlParams.keySet().equals(accepted);
     }
         
 
+    
+    
+    static BytesXMLMessage formatResponseMessage(BytesXMLMessage msg, RequestMessageObject rmo) {
+        if ("pretty".equals(rmo.getParam("format"))) {
+            TextMessage outMsg = f.createMessage(TextMessage.class);
+            JsonObjectBuilder job = Json.createObjectBuilder();
+            job.add("msgId", rmo.requestCorrelationId);
+            job.add("message", UsefulUtils.solMsgToJson(msg));
+            outMsg.setText(UsefulUtils.prettyPrint(job.build()));
+            return outMsg;
+        } else if ("dump".equals(rmo.getParam("format"))) {
+            TextMessage outMsg = f.createMessage(TextMessage.class);
+            outMsg.setText(String.format("%-40s%s%n%s",
+                    "RestQ msgId:",rmo.requestCorrelationId, msg.dump()));
+            return outMsg;
+        } else {
+            TextMessage outMsg = f.createMessage(TextMessage.class);
+            JsonObjectBuilder job = Json.createObjectBuilder();
+            job.add("msgId", rmo.requestCorrelationId);
+            job.add("message", UsefulUtils.solMsgToJson(msg));
+            outMsg.setText(job.build().toString());
+            return outMsg;
+        }
+    }
+
+
+    static ReturnValue handleJcsmpException(Exception e) {
+        if (e instanceof JCSMPErrorResponseException) {
+            JCSMPErrorResponseException e2 = (JCSMPErrorResponseException)e;
+            return new ReturnValue(e2.getResponseCode(), e2.getResponsePhrase(), false);
+        } else if (e.getCause() != null && e.getCause() instanceof JCSMPErrorResponseException) {
+            JCSMPErrorResponseException e2 = (JCSMPErrorResponseException)e.getCause();
+            return new ReturnValue(e2.getResponseCode(), e2.getResponsePhrase(), false);
+        } else {  // not sure
+            return new ReturnValue(500, e.getMessage(), false);
+        }
+    }
+        
+
+    
+    
     
     
     private UsefulUtils() {
