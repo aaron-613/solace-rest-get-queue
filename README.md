@@ -31,3 +31,4 @@ If the Message VPN is configured with Messaging Mode, the initiating REST reques
 curl -u clientName:password http://localhost:9000/POST/restQ/bind/q1 -X POST
 ```
 
+

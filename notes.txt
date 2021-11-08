@@ -1,6 +1,15 @@
 
 
 
+Bind           POST    restQ/bind/<queueName>
+                         reply: { flowId }
+Unbind         DELETE  restQ/unbind/<queueNaem>?flowId=blahblhlabhahblhalb
+
+Consume Msg    GET     restQ/con/<flowId>
+                         reply: { msg, msgId }
+Ack message    DELETE  restQ/ack/<msgId>
+
+
 
 setStringProperty("JMS_Solace_HTTP_method", "GET")
 setStringProperty("JMS_Solace_HTTP_target_path_query_verbatim", "some/path&query=val").

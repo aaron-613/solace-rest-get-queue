@@ -66,7 +66,8 @@ public class SolaceRestQueueConsumer implements XMLMessageListener {
     //private Map<String,Map<String,Browser>> browsers = new HashMap<>();
 
     public static final String QUEUE_SUB_MATCH_PATTERN = ">";  // all queues
-    public static final String CORR_ID_REGEX = "ID:Solace\\-[0-9a-f]{16}"; 
+//    public static final String CORR_ID_REGEX = "ID:Solace\\-[0-9a-f]{16}"; 
+    public static final String CORR_ID_REGEX = "[0-9a-f]{16}";
 
     
     
