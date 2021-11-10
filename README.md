@@ -4,7 +4,7 @@ This stateful microserve is used to provide a REST-based interface to consume/ac
 
 The application uses the JCSMP API to connect to the same Solace Message VPN where the queues are, and subscribes using Direct messaging topics to listen for incoming REST requests.
 
-The application is designed to work with a Message VPN in either (Micro)Gateway mode or REST Messaging mode.  It does not provide a true "RESTful" API as it violates some conventions (e.g. calling GET on Flow returns next message on the Flow, which is not idempotent); this API is more RPC-style... most of these calls should probably be `POST`.
+The application is designed to work with a Message VPN in either (Micro)Gateway mode or ~~REST Messaging mode~~ (not yet!).  It does not provide a true "RESTful" API as it violates some conventions (e.g. calling GET on Flow returns next message on the Flow, which is not idempotent); this API is more RPC-style... most of these calls should probably be `POST`.
 
 ## URL way (µgw & msg'ing)
 
@@ -24,9 +24,15 @@ GET      /restQ/getMsg/<msgId>      --> retrieves previous unacked message
 
 ### REST Messaging
 
-If the Message VPN is configured with Messaging Mode, the initiating REST requestor must prepend the REST verb + `/` to the front of the URL.  E.g.:
+If the Message VPN is configured with Messaging Mode, the initiating REST requestor must do a few different things:
+- Prepend the REST verb + `/` to the front of the URL
+- REST Messaging mode doesn't support URL query parameters, any required params must be passed as a JSON payload
+- Supply a reply header: `solace-reply-wait-time-in-ms`
+- Ensure Content-Type is set correctly
+
+E.g.:
 ```
-curl -u clientName:password http://localhost:9000/POST/restQ/bind/q1 -X POST
+curl -u clientName:password http://localhost:9000/POST/restQ/con/cb4faa8e-e330-44a0-94d5-fc3ff4d78d42 -X POST -d '{"format":"pretty"}' -H 'solace-reply-wait-time-in-ms: 5000' -H 'content-type: application/json'
 ```
 
 # Getting Started
