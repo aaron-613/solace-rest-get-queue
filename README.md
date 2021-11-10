@@ -18,8 +18,8 @@ unbind()   DELETE  /restQ/unbind/<flowId>
            GET      /restQ/unacked/<flowId>    --> retrieves list of all unacked msgIds on this flow
            GET      /restQ/getMsg/<msgId>      --> retrieves previous unacked message
 ```
-Bind
-Consume
+- [bind()](#bind-to-queue)
+- [receive()](#receive-one-message-from-queue)
 
 ### REST Messaging
 
