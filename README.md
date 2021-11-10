@@ -20,7 +20,7 @@ unbind()     DELETE    /restQ/unbind/<flowId>
 ```
 Examples: 
 [`bind()`](#bind-to-queue)
-[`receive()`](#receive-one-message-from-queue)
+[`receive()`](#receive-one-message-from-queue-using-flowid)
 
 ### REST Messaging
 
