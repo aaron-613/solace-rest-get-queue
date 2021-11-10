@@ -277,19 +277,19 @@ public class UsefulUtils {
             JsonObjectBuilder job = Json.createObjectBuilder();
             job.add("msgId", rmo.requestCorrelationId);
             job.add("message", UsefulUtils.solaceMsgToJson(msg));
-            outMsg.setText(UsefulUtils.prettyPrint(job.build()));
+            outMsg.setText(UsefulUtils.prettyPrint(job.build()) + "\n");
             return outMsg;
         } else if ("dump".equals(rmo.getParam("format"))) {
             TextMessage outMsg = f.createMessage(TextMessage.class);
-            outMsg.setText(String.format("%-40s%s%n%s",
-                    "RestQ msgId:",rmo.requestCorrelationId, msg.dump()));
+            outMsg.setText(String.format("%-40s%s%n%n%s",  // 40 spaces, align left, pring msgId, then \n\n message
+                    "RestQ msgId:",rmo.requestCorrelationId, msg.dump()));  // already has \n at end of dump()
             return outMsg;
         } else {
             TextMessage outMsg = f.createMessage(TextMessage.class);
             JsonObjectBuilder job = Json.createObjectBuilder();
             job.add("msgId", rmo.requestCorrelationId);
             job.add("message", UsefulUtils.solaceMsgToJson(msg));
-            outMsg.setText(job.build().toString());
+            outMsg.setText(job.build().toString() + "\n");
             return outMsg;
         }
     }
