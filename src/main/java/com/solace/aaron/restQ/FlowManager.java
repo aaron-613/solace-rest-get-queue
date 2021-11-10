@@ -24,9 +24,11 @@ interface FlowManager {
     void unbind(String queueName, String flowId);
 
     /** is there currently an active flow to this queue? */
-    boolean hasActiveFlow(String flowId);
+    boolean doesQueueHaveBoundFlow(String queueName);
     
-    String getFlowId(String queueName);
+    boolean doesFlowExist(String flowId);
+    
+    String getFlowIdForQueue(String queueName);
 //    public Flow getFlow(String queueName);
     public Flow getFlowFromId(String flowId);
     

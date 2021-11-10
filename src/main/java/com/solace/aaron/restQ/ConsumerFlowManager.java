@@ -50,16 +50,17 @@ class ConsumerFlowManager implements FlowManager {
         flow_prop.setAckMode(JCSMPProperties.SUPPORTED_MESSAGE_ACK_CLIENT);  // ACK later manually
         flow_prop.setTransportWindowSize(FlowManager.FLOW_TRANSPORT_WINDOW_SIZE);  // why not?  REST consumers aren't fast!
         flow_prop.setActiveFlowIndication(true);
-        String selector = null;
-        if (!rmo.payload.isEmpty()) {
-            JsonReader reader = Json.createReader(new StringReader(rmo.payload));
-            try {
-                JsonObject json = reader.readObject();
-                selector = json.getString("selector");
-            } catch (RuntimeException e) {
-                throw e;
-            }
-        }
+        String selector = rmo.getParam("selector");  // might be null if not set
+
+//        if (!rmo.payloadString.isEmpty()) {
+//            JsonReader reader = Json.createReader(new StringReader(rmo.payloadString));
+//            try {
+//                JsonObject json = reader.readObject();
+//                selector = json.getString("selector");
+//            } catch (RuntimeException e) {
+//                throw e;
+//            }
+//        }
         if (selector != null) flow_prop.setSelector(selector);
         System.out.printf("Attempting to bind to queue '%s' on the broker.%n", queueName);
         FlowReceiver flowQueueReceiver = null;
@@ -73,7 +74,8 @@ class ConsumerFlowManager implements FlowManager {
                 }
             });  // super basic blocking/sync queue receiver
             System.out.println("SUCCESS!");
-            ConsumerFlow flow = new ConsumerFlow(queueName, rmo.requestCorrelationId, flowQueueReceiver);
+            ConsumerFlow flow = new ConsumerFlow(queueName, rmo.uuid, flowQueueReceiver);
+            flow.restartTimer();
             queueToFlowIdMap.put(queueName,flow.getFlowId());
             flowIdToQueueMap.put(flow.getFlowId(), queueName);
             queueToFlowMap.put(queueName, flow);
@@ -100,21 +102,30 @@ class ConsumerFlowManager implements FlowManager {
         
         ConsumerFlow flow = flowIdToFlowMap.get(flowId);
         flow.flowReceiver.close();
-        queueToFlowIdMap.remove(queueName);
+        queueToFlowIdMap.remove(queueName);  // get rid of queue-mapped objects
         queueToFlowMap.remove(queueName);
+        // but leave the flowId-mapped objects just in case
     }
 
+    
 
     @Override
-    public boolean hasActiveFlow(String flowId) {
+    public boolean doesQueueHaveBoundFlow(String queueName) {
+        System.out.println(">> queueToFlowIdMap.containsKey?  "+queueName+"  --> "+queueToFlowIdMap.containsKey(queueName));
+        System.out.println(">> queueToFlowMap.containsKey?  "+queueName+"  --> "+queueToFlowMap.containsKey(queueName));
+        return queueToFlowIdMap.containsKey(queueName);
+    }
+
+    @Override
+    public boolean doesFlowExist(String flowId) {
         System.out.println(">> flowIdToFlowMap.containsKey?  "+flowId+"  --> "+flowIdToFlowMap.containsKey(flowId));
         System.out.println(">> flowIdToQueueMap.containsKey?  "+flowId+"  --> "+flowIdToQueueMap.containsKey(flowId));
         return flowIdToFlowMap.containsKey(flowId);
     }
-    
+
     
     @Override
-    public String getFlowId(String queueName) {
+    public String getFlowIdForQueue(String queueName) {
         return queueToFlowIdMap.get(queueName);
     }
     
@@ -136,6 +147,9 @@ class ConsumerFlowManager implements FlowManager {
 //        return queueToFlowMap.get(queueName).unackedMessages.get(msgId);
 //    }
 
+    /**
+     * For every FlowReceiver, initiate close()
+     */
     @Override
     public void shutdown() {
         for (ConsumerFlow flow : flowIdToFlowMap.values()) {
@@ -152,7 +166,7 @@ class ConsumerFlowManager implements FlowManager {
         private String flowId;                      // the auto-gen flowId, derived from original MicroGateway request correlationid
         private final FlowReceiver flowReceiver;    // the JCSMP flow receiver to receive messages on
         final Map<String,BytesXMLMessage> unackedMessages = new HashMap<>();  // corrID -> message
-        private ScheduledFuture<?> future = null;       // timer for inactivity
+        private ScheduledFuture<?> futureTask = null;       // timer for inactivity
 
         private ConsumerFlow(String queueName, String flowId, FlowReceiver flowReceiver) {
             this.queueName = queueName;
@@ -179,18 +193,19 @@ class ConsumerFlowManager implements FlowManager {
             @Override
             public void run() {
                 System.out.println("TIMEOUT!");
-                synchronized (this) {
+                synchronized (this) {  // what are we synchronizing on???
                     System.out.println(queueName);
-                    flowReceiver.close();
+                    flowReceiver.close();  // during a timeout, just close the FlowReceiver
+                    // but leave all the maps alone
                 }
             }
         }
         
         private void restartTimer() {
-            if (future != null) {
-                future.cancel(true);
+            if (futureTask != null) {
+                futureTask.cancel(true);
             }
-            future = pool.schedule(new QueueTimeoutTimer(), FLOW_TIMEOUT_SEC, TimeUnit.SECONDS);
+            futureTask = pool.schedule(new QueueTimeoutTimer(), FLOW_TIMEOUT_SEC, TimeUnit.SECONDS);
         }
 
         
@@ -217,6 +232,7 @@ class ConsumerFlowManager implements FlowManager {
         @Override
         public BytesXMLMessage getUnackedMessage(String msgId) {
             assert unackedMessages.containsKey(msgId);
+            restartTimer();
             return unackedMessages.get(msgId);
         }
 
@@ -229,11 +245,13 @@ class ConsumerFlowManager implements FlowManager {
 
         @Override
         public boolean checkUnackedList(String msgId) {
+            restartTimer();
             return unackedMessages.containsKey(msgId);
         }
 
         @Override
         public Set<String> getUnackedMessageIds() {
+            restartTimer();
             return unackedMessages.keySet();
         }
     }

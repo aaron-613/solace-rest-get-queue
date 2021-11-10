@@ -10,22 +10,28 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
+/**
+ * Convenience/helper class to store a representation of a received JCSMP Message via the REST
+ * interface.  
+ * @author AaronLee
+ *
+ */
 class RequestMessageObject {
         
     final String resourceName;
     final BytesXMLMessage requestMessage;
-    final String requestCorrelationId;
-    final Map<String, List<String>> urlParams;
-    final String payload;
+    final String uuid = UUID.randomUUID().toString();
+    final Map<String, List<String>> requestParams;
+    final String payloadString;
     
-    RequestMessageObject(String resourceName, BytesXMLMessage requestMessage, String requestCorrelationId, Map<String, List<String>> urlParams) {
+    RequestMessageObject(String resourceName, BytesXMLMessage requestMessage, Map<String, List<String>> requestParams) {
         this.resourceName = resourceName;
         this.requestMessage = requestMessage;
-        this.requestCorrelationId = requestCorrelationId;
-        if (urlParams != null) this.urlParams = Collections.unmodifiableMap(urlParams);
-        else this.urlParams= Collections.unmodifiableMap(Collections.emptyMap());
-        this.payload = parsePayload(requestMessage);
+        if (requestParams != null) this.requestParams = Collections.unmodifiableMap(requestParams);
+        else this.requestParams= Collections.unmodifiableMap(Collections.emptyMap());
+        this.payloadString = parsePayload(requestMessage);
     }
     
     private String parsePayload(BytesXMLMessage msg) {
@@ -44,22 +50,39 @@ class RequestMessageObject {
     }
     
     String getParam(String key) {
-        if (urlParams.containsKey(key)) return urlParams.get(key).get(0);
+        if (requestParams.containsKey(key)) return requestParams.get(key).get(0);
         else return null;
     }
     
-    String getPayload() {
-        return payload;
+    String getPayloadString() {
+        return payloadString;
     }
+
+    /**
+     * Pass in a set of mandatory keys, verify they've all been passed in and just one of each.
+     * Will also verify for any other (optional) keys present, there is only one of each.
+     */
+    boolean checkForMandatoryParams(String... keys) {
+        Set<String> mandatoryKeySet = new HashSet<>(Arrays.asList(keys));
+        for (String key : mandatoryKeySet) {                       // for each mandatory key
+            if (!requestParams.containsKey(key)) return false;     // does my passed params contain this key?
+            if (requestParams.get(key).size() != 1) return false;  // and occurs only once?
+        }
+        return true;
+    }
+
     
-    /** pass in a set of keys, verify they've all been passed in and just one of each. */
+    /**
+     * Pass in a set of keys, verify they've all been passed in and just one of each.
+     * Will also verify for any other (optional) keys present, there is only one of each.
+     */
     boolean checkForAllowedParams(String... keys) {
-        Set<String> keySet = new HashSet<>(Arrays.asList(keys));
+        Set<String> allowedKeySet = new HashSet<>(Arrays.asList(keys));
         // first, make sure all mandatory keys are in my URL params
         // next, make each URL param appears only once
-        for (String key : urlParams.keySet()) {
-            if (!keySet.contains(key)) return false;
-            if (urlParams.get(key).size() != 1) return false;
+        for (String key : requestParams.keySet()) {                // for each passed param key
+            if (!allowedKeySet.contains(key)) return false;        // is it allowed?
+            if (requestParams.get(key).size() != 1) return false;  // and occurs only once?
         }
         return true;
     }
@@ -67,11 +90,11 @@ class RequestMessageObject {
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        sb.append(String.format("resourceName:         %s%n",resourceName));
-        sb.append(String.format("requestCorrelationId: %s%n",requestCorrelationId));
-        sb.append(String.format("urlParams:            %s%n",urlParams.toString()));
-        sb.append(String.format("payload:              %s%n",payload));
-        sb.append(requestMessage.dump());
+        sb.append(String.format("resourceName:  %s%n",resourceName));
+        sb.append(String.format("uuid:          %s%n",uuid));
+        sb.append(String.format("requestParams: %s%n",requestParams.toString()));
+        sb.append(String.format("payload:       %s%n",payloadString));
+        //sb.append(requestMessage.dump());
         return sb.toString();
     }
 }

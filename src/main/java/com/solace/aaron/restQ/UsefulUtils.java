@@ -21,7 +21,6 @@ import java.util.AbstractMap.SimpleImmutableEntry;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -30,7 +29,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import javax.json.Json;
 import javax.json.JsonArrayBuilder;
-import javax.json.JsonException;
 import javax.json.JsonObject;
 import javax.json.JsonObjectBuilder;
 import javax.json.JsonReader;
@@ -222,27 +220,24 @@ public class UsefulUtils {
         return config;
     }
     
-    static Map<String, List<String>> parsePayloadParamQuery(String payload) {
+    static void parseJsonPayloadParams(String payload, Map<String, List<String>> map) throws RuntimeException {
         JsonReader reader = Json.createReader(new StringReader(payload));
-        Map<String, List<String>> retMap = new HashMap<>();
         try {
             JsonObject json = reader.readObject();
             for (String key : json.keySet()) {
-                if (!retMap.containsKey(key)) {
-                    retMap.put(key, new ArrayList<>());
+                if (!map.containsKey(key)) {
+                    map.put(key, new ArrayList<>());
                 }
-                retMap.get(key).add(json.getString(key));
+                map.get(key).add(json.getString(key));
             }
-        } catch (JsonException e) {
-            
-        } catch (ClassCastException e) {
-            
+        } catch (RuntimeException e) {
+            e.printStackTrace();
+            throw e;
         }
-        return retMap;
     }
 
     static Map<String, List<String>> parseUrlParamQuery(String fullUrl) {
-        if (!fullUrl.contains("?")) return Collections.emptyMap();
+        if (!fullUrl.contains("?")) return new HashMap<>();  // not empty map b/c we might add to it later
         String paramStr = fullUrl.split("\\?",2)[1];
         return Arrays.stream(paramStr.split("&"))
                 .map(UsefulUtils::splitQueryParameter)
@@ -275,19 +270,19 @@ public class UsefulUtils {
         if ("pretty".equals(rmo.getParam("format"))) {
             TextMessage outMsg = f.createMessage(TextMessage.class);
             JsonObjectBuilder job = Json.createObjectBuilder();
-            job.add("msgId", rmo.requestCorrelationId);
+            job.add("msgId", rmo.uuid);
             job.add("message", UsefulUtils.solaceMsgToJson(msg));
             outMsg.setText(UsefulUtils.prettyPrint(job.build()) + "\n");
             return outMsg;
         } else if ("dump".equals(rmo.getParam("format"))) {
             TextMessage outMsg = f.createMessage(TextMessage.class);
             outMsg.setText(String.format("%-40s%s%n%n%s",  // 40 spaces, align left, pring msgId, then \n\n message
-                    "RestQ msgId:",rmo.requestCorrelationId, msg.dump()));  // already has \n at end of dump()
+                    "RestQ msgId:",rmo.uuid, msg.dump()));  // already has \n at end of dump()
             return outMsg;
         } else {
             TextMessage outMsg = f.createMessage(TextMessage.class);
             JsonObjectBuilder job = Json.createObjectBuilder();
-            job.add("msgId", rmo.requestCorrelationId);
+            job.add("msgId", rmo.uuid);
             job.add("message", UsefulUtils.solaceMsgToJson(msg));
             outMsg.setText(job.build().toString() + "\n");
             return outMsg;
