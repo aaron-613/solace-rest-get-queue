@@ -88,13 +88,13 @@ public class SolaceRestQueueConsumer implements XMLMessageListener {
             // so that was successful, so now add subs to that flow
             //String flowId = flowManager.getFlowId(queueName);
             session.addSubscription(f.createTopic("GET/restQ/*/"+flowId),true);         // catch-all for this flowId
-//            session.addSubscription(f.createTopic("GET/restQ/con/"+flowId),true);         // consume a msg off a flowId
+//            session.addSubscription(f.createTopic("GET/restQ/rec/"+flowId),true);         // consume a msg off a flowId
 //            session.addSubscription(f.createTopic("DELETE/restQ/ack/"+flowId),true);      // ack a msg off a flowId
 //            session.addSubscription(f.createTopic("GET/restQ/getMsg/"+flowId),true);      // get a specific msg by flowId and msgId
 //            session.addSubscription(f.createTopic("GET/restQ/unacked/"+flowId),true);     // get a list of unacked msgs based on flowId
 //            session.addSubscription(f.createTopic("HEAD/restQ/keepalive/"+flowId),true);  // heartbeat to keep flow or browse alive
             return new ReturnValue(201, "OK", true)
-//                    .withHttpHeader("JMS_Solace_HTTP_field_Location","/restQ/con/"+flowId)  // can't pass this through
+//                    .withHttpHeader("JMS_Solace_HTTP_field_Location","/restQ/rec/"+flowId)  // can't pass this through
                     ;
 /*        } catch (OperationNotSupportedException e) {  // not allowed to do this
             logger.error("Nope, couldn't do that!",e);
@@ -258,7 +258,7 @@ public class SolaceRestQueueConsumer implements XMLMessageListener {
         session.addSubscription(f.createTopic("POST/restQ/browse/"+QUEUE_SUB_MATCH_PATTERN));  // start a read/delete browse session
         
         // these next ones will us a flow
-//        session.addSubscription(f.createTopic("GET/restQ/con/"+QUEUE_SUB_MATCH_PATTERN));      // consume a msg off a flowId
+//        session.addSubscription(f.createTopic("GET/restQ/rec/"+QUEUE_SUB_MATCH_PATTERN));      // consume a msg off a flowId
 //        session.addSubscription(f.createTopic("DELETE/restQ/ack/"+QUEUE_SUB_MATCH_PATTERN));   // ack a msg off a flowId
 
 //        session.addSubscription(f.createTopic("GET/restQ/next/"+QUEUE_SUB_MATCH_PATTERN));     // get next msg off a browseId
@@ -561,7 +561,7 @@ User Property Map:                      4 entries
         Map<String, List<String>> urlParams = Collections.emptyMap();
         if (restGatewayMode) {
             try {
-                // Key 'JMS_Solace_HTTP_target_path_query_verbatim' (String): restQ/con/q1?msgId=ID:Solace-b19d76da378a830b&format=pretty
+                // Key 'JMS_Solace_HTTP_target_path_query_verbatim' (String): restQ/rec/q1?msgId=ID:Solace-b19d76da378a830b&format=pretty
                 String fullUrl = requestMessage.getProperties().getString("JMS_Solace_HTTP_target_path_query_verbatim");
                 if (fullUrl == null) {
                     sendErrorResponse(requestMessage, 400, "missing user property \"JMS_Solace_HTTP_target_path_query_verbatim\", use microgateway");
@@ -597,8 +597,8 @@ User Property Map:                      4 entries
             bindToQueue(rmo);
         }
         ////////////////////////////
-        // CONSUME!
-        else if (topic.startsWith("GET/restQ/con/")) {
+        // CONSUME!  RECEIVE!
+        else if (topic.startsWith("GET/restQ/rec/")) {
             consumeNext(rmo);
         }
         //////////////////////////
