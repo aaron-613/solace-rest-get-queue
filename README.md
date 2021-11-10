@@ -10,13 +10,14 @@ The application is designed to work with a Message VPN in either (Micro)Gateway 
 ## REST API for MicroGateway
 
 ```
-bind()       POST      /restQ/bind/<queueName>                --> replies with flowId
-receive()    GET       /restQ/recv/<flowId>?format=<format>   --> replies with msgId and formatted message
-ackMsg()     DELETE    /restQ/ack/<msgId>
-unbind()     DELETE    /restQ/unbind/<flowId>
+bind()      POST     /restQ/bind/<queueName>                --> replies with flowId
+receive()   GET      /restQ/recv/<flowId>?format=<format>   --> replies with msgId and formatted message
+ackMsg()    DELETE   /restQ/ack/<msgId>
+unbind()    DELETE   /restQ/unbind/<flowId>
 
-             GET       /restQ/unacked/<flowId>    --> retrieves list of all unacked msgIds on this flow
-             GET       /restQ/getMsg/<msgId>      --> retrieves previous unacked message
+            GET      /restQ/unacked/<flowId>     --> retrieves list of all unacked msgIds on this flow
+            GET      /restQ/getMsg/<msgId>       --> retrieves previous unacked message
+            HEAD     /restQ/keepalive/<flowId>   --> ensures Flow does not close due to inactivity
 ```
 Examples: 
 [`bind()`](#bind-to-queue)
