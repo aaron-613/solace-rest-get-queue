@@ -10,10 +10,9 @@ The application is designed to work with a Message VPN in either (Micro)Gateway 
 
 
 ```
-POST     /restQ/bind/<queueName>    --> replies with flowId
+POST     /restQ/bind/<queueName>                --> replies with flowId
 
-POST     /restQ/con/<flowId>        --> replies with msg & msgId
-GET      /restQ/con/<flowId>     (optional, depending on program options)
+GET      /restQ/con/<flowId>?format=<format>    --> replies with msgId and formatted message
 DELETE   /restQ/unbind/<flowId>
 
 DELETE   /restQ/ack/<msgId>
