@@ -76,7 +76,8 @@ curl -u clientUsername:password http://localhost:9000/restQ/bind/q1 -X POST
 ### Default compact JSON representation
 ```
 curl -u clientUsername:password http://localhost:9000/restQ/recv/5447c6cd-985f-4369-a27b-ce6f503bdafc
-
+```
+```
 {"msgId":"175801ff-9d99-4960-954b-0c0db279f461","message":{"destination":"bridge/testing/A000001MWC/5581561693/Good","destinationType":"Topic","applicationMessageId":"d7de924928d1f5dd1478e95c7ab2c72e2b1cedd9","cos":"USER_COS_1","deliveryMode":"NON_PERSISTENT","mesageId":"42772","priority":4,"redelivered":true,"replicationGroupMessageId":"rmid1:0a4f3-1f694db795f-00000000-0000a714","sequenceNumber":1,"messageClass":"TextMessage","payload":{"dataTag":"value","UAI_DFA":"A000001MWC","UAI_SRC":"A00000L6G1","dfaTimestamp":"2020-12-22T10:44:17.810Z","nodeId":"ns=13;b=ef0fab18f5755a4a17e9d3297a16c1c7","hashcode":"d7de924928d1f5dd1478e95c7ab2c72e2b1cedd9","msgId":"5581561693","values":{"value":{"dataType":"Float","arrayType":"Scalar","value":-0.09},"statusCode":{"value":0,"description":"No Error","name":"Good"},"sourceTimestamp":"2020-12-22T10:44:16.945Z","sourcePicoseconds":971000000,"serverTimestamp":"2020-12-22T10:44:16.989Z","serverPicoseconds":973500000}}}}
 ```
 
@@ -84,7 +85,8 @@ curl -u clientUsername:password http://localhost:9000/restQ/recv/5447c6cd-985f-4
 ### Pretty-Print JSON representation (format=pretty)
 ```
 curl -u clientUsername:password http://localhost:9000/restQ/recv/5447c6cd-985f-4369-a27b-ce6f503bdafc?format=pretty
-
+```
+```
 {
     "msgId": "ff851856-67a0-41fa-9889-0c23b8bf29b4",
     "message": {
@@ -132,7 +134,8 @@ curl -u clientUsername:password http://localhost:9000/restQ/recv/5447c6cd-985f-4
 
 ```
 curl -u clientUsername:password http://localhost:9000/restQ/recv/5447c6cd-985f-4369-a27b-ce6f503bdafc?format=dump
-
+```
+```
 RestQ msgId:                            8e75adce-d786-4344-af3b-a89b77dbbf7a
 
 Destination:                            Topic 'bridge/testing/A000001MWC/5581561693/Good'
