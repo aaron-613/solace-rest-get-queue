@@ -49,8 +49,14 @@ import org.apache.logging.log4j.Logger;
 
 public class SolaceRestQueueConsumer implements XMLMessageListener {
 
+
+    public enum Mode {
+        GATEWAY,
+        MESSAGING,
+        ;
+    }
     
-    public boolean restGatewayMode = true;
+    private Mode mode = Mode.GATEWAY;
     
     private JCSMPSession session;
     private XMLMessageProducer producer;
@@ -67,7 +73,7 @@ public class SolaceRestQueueConsumer implements XMLMessageListener {
 
     public static final String QUEUE_SUB_MATCH_PATTERN = ">";  // all queues
 //    public static final String CORR_ID_REGEX = "ID:Solace\\-[0-9a-f]{16}"; 
-    public static final String CORR_ID_REGEX = "[0-9a-f]{16}";
+    public static final String CORR_ID_REGEX = "([0-9a-f]{16})";
 
     
     
@@ -88,7 +94,8 @@ public class SolaceRestQueueConsumer implements XMLMessageListener {
 //            session.addSubscription(f.createTopic("GET/restQ/unacked/"+flowId),true);     // get a list of unacked msgs based on flowId
 //            session.addSubscription(f.createTopic("HEAD/restQ/keepalive/"+flowId),true);  // heartbeat to keep flow or browse alive
             return new ReturnValue(201, "OK", true)
-                    .withHttpHeader("JMS_Solace_HTTP_field_Location","/restQ/con/"+flowId);
+//                    .withHttpHeader("JMS_Solace_HTTP_field_Location","/restQ/con/"+flowId)  // can't pass this through
+                    ;
 /*        } catch (OperationNotSupportedException e) {  // not allowed to do this
             logger.error("Nope, couldn't do that!",e);
             return new ReturnValue(501, e.getMessage(), false);
@@ -159,8 +166,9 @@ public class SolaceRestQueueConsumer implements XMLMessageListener {
         }
         try {
             SDTMap map = f.createMap();
-            map.putShort("JMS_Solace_HTTP_status_code",(short)200);
+            map.putShort("JMS_Solace_HTTP_status_code",(short)code);
             map.putString("JMS_Solace_HTTP_reason_phrase","OK");
+            map.putString("JMS_Solace_HTTP_location","/test/blah");
             for (String key : otherHeaders.keySet()) {
                 map.putString(key, otherHeaders.get(key));
             }
@@ -244,7 +252,7 @@ public class SolaceRestQueueConsumer implements XMLMessageListener {
         
         // MicroGateway: Allow: DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT
         session.addSubscription(f.createTopic("POST/restQ/bind/"+QUEUE_SUB_MATCH_PATTERN));    // start a consumer flow
-        session.addSubscription(f.createTopic("POST/restQ/unbind/"+QUEUE_SUB_MATCH_PATTERN));  // close a flow
+        //session.addSubscription(f.createTopic("POST/restQ/unbind/"+QUEUE_SUB_MATCH_PATTERN));  // close a flow
         
         session.addSubscription(f.createTopic("GET/restQ/browse/"+QUEUE_SUB_MATCH_PATTERN));   // start a read-only browse session
         session.addSubscription(f.createTopic("POST/restQ/browse/"+QUEUE_SUB_MATCH_PATTERN));  // start a read/delete browse session
@@ -261,7 +269,7 @@ public class SolaceRestQueueConsumer implements XMLMessageListener {
 //
 //        session.addSubscription(f.createTopic("HEAD/restQ/keepalive/"+QUEUE_SUB_MATCH_PATTERN));  // heartbeat to keep flow or browse alive
         
-        session.addSubscription(f.createTopic("*/restQ/>"));            // suck it!  not interested
+//        session.addSubscription(f.createTopic("*/restQ/>"));            // suck it!  not interested
 
         consumer.start();
     }
@@ -302,7 +310,7 @@ public class SolaceRestQueueConsumer implements XMLMessageListener {
             sendErrorResponse(rmo.requestMessage, ErrorTypes.URL_PARAMS_NOT_EMPTY);
             return;
         }
-        if (flowManager.hasActiveQueueFlow(rmo.resourceName)) {
+        if (flowManager.hasActiveFlow(rmo.resourceName)) {
             sendErrorResponse(rmo.requestMessage, 400, "queue " + rmo.resourceName + " already has active flow");
             return;
         }
@@ -372,8 +380,8 @@ public class SolaceRestQueueConsumer implements XMLMessageListener {
             return;
         }
         // check the queue has an active flow
-        if (flowManager.hasActiveQueueFlow(rmo.resourceName)) {
-            sendErrorResponse(rmo.requestMessage, 404, "queue consumer not active");
+        if (!flowManager.hasActiveFlow(rmo.resourceName)) {
+            sendErrorResponse(rmo.requestMessage, ErrorTypes.INVALID_FLOW_ID);
             return;
         }
         // check that the passed flowId matches
@@ -530,13 +538,13 @@ User Property Map:                      4 entries
         }
         String resourceName = topic.split("/",4)[3];  // could be queue, or maybe flowId..?
         // we're assuming that this app is using MicroGateway mode, which auto-populates correlation ID & some User Properties
-        //String requestCorrelationId = requestMessage.getCorrelationId();
         String requestCorrelationId = UUID.randomUUID().toString();
-/*        if (requestCorrelationId == null || !requestCorrelationId.matches(CORR_ID_REGEX)) {
-            sendErrorResponse(requestMessage, 400, "invalid/missing Correlation ID");
-            return;
-        }
-*/
+//        String requestCorrelationId = requestMessage.getCorrelationId();
+//        if (requestCorrelationId == null || !requestCorrelationId.matches(CORR_ID_REGEX)) {
+//            sendErrorResponse(requestMessage, 400, "invalid/missing Correlation ID");
+//            return;
+//        }
+
         boolean restGatewayMode = requestMessage.getProperties() != null
                 && requestMessage.getProperties().containsKey("JMS_Solace_HTTP_target_path_query_verbatim");
         boolean restMessagingMode = requestMessage instanceof TextMessage

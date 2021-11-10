@@ -45,7 +45,7 @@ public class UsefulUtils {
     
 
     @SuppressWarnings("deprecation")
-    public static JsonStructure solMsgToJson(BytesXMLMessage msg) {
+    static JsonStructure solaceMsgToJson(BytesXMLMessage msg) {
         JsonObjectBuilder job = Json.createObjectBuilder();
         // topic or queue
         job.add("destination",msg.getDestination().getName());
@@ -79,6 +79,7 @@ public class UsefulUtils {
         if (msg.getMessageId() != null) job.add("mesageId", msg.getMessageId());  // deprecated, but still dump it out
         job.add("priority",msg.getPriority());
         if (msg.getRedelivered()) job.add("redelivered", msg.getRedelivered());
+        if (msg.getReplicationGroupMessageId() != null) job.add("replicationGroupMessageId", msg.getReplicationGroupMessageId().toString());
         if (msg.isReplyMessage()) job.add("replyMessage", msg.isReplyMessage());
         if (msg.getReplyTo() != null) job.add("replyTo",msg.getReplyTo().getName());
         if (msg.getSenderId() != null) job.add("senderId",msg.getSenderId());
@@ -87,12 +88,18 @@ public class UsefulUtils {
         if (msg.getTimeToLive() > 0) job.add("timeToLive", msg.getTimeToLive());
 
         // properties
-        if (msg.getProperties() != null) job.add("properties", SDTMapToJson(msg.getProperties()));
+        if (msg.getProperties() != null) job.add("properties", sdtMapToJson(msg.getProperties()));
 
         // payload
         if (msg instanceof TextMessage) {
             job.add("messageClass", "TextMessage");
-            job.add("payload", ((TextMessage)msg).getText());
+            // let's test to see if it's JSON..!?!?
+            try {
+                JsonReader reader = Json.createReader(new StringReader(((TextMessage)msg).getText()));
+                job.add("payload", reader.read());
+            } catch (RuntimeException e) {  // nope!
+                job.add("payload", ((TextMessage)msg).getText());
+            }
         } else if (msg instanceof BytesMessage) {
             job.add("messageClass", "BytesMessage");
             job.add("payload", new String(Base64.getEncoder().encode(msg.getAttachmentByteBuffer().array())));
@@ -109,7 +116,7 @@ public class UsefulUtils {
         return job.build();
     }
     
-    static JsonStructure SDTMapToJson(SDTMap map) {
+    static JsonStructure sdtMapToJson(SDTMap map) {
         JsonObjectBuilder job = Json.createObjectBuilder();
         try {
             for (String key : map.keySet()) {
@@ -117,9 +124,9 @@ public class UsefulUtils {
                 if (o instanceof String) {
                     job.add(key, (String)o);
                 } else if (o instanceof SDTMap) {
-                    job.add(key, SDTMapToJson((SDTMap)o));
+                    job.add(key, sdtMapToJson((SDTMap)o));
                 } else if (o instanceof SDTStream) {
-                    job.add(key, SDTStreamToJson((SDTStream)o));
+                    job.add(key, sdtStreamToJson((SDTStream)o));
                 } else if (o instanceof Double) {
                     job.add(key, (Double)o);
                 } else if (o instanceof Float) {
@@ -151,7 +158,7 @@ public class UsefulUtils {
         return job.build();
     }
 
-    static JsonStructure SDTStreamToJson(SDTStream stream) {
+    static JsonStructure sdtStreamToJson(SDTStream stream) {
         JsonArrayBuilder jab = Json.createArrayBuilder();
         try {
             while (stream.hasRemaining()) {
@@ -159,9 +166,9 @@ public class UsefulUtils {
                 if (o instanceof String) {
                     jab.add((String)o);
                 } else if (o instanceof SDTMap) {
-                    jab.add(SDTMapToJson((SDTMap)o));
+                    jab.add(sdtMapToJson((SDTMap)o));
                 } else if (o instanceof SDTStream) {
-                    jab.add(SDTStreamToJson((SDTStream)o));
+                    jab.add(sdtStreamToJson((SDTStream)o));
                 } else if (o instanceof Double) {
                     jab.add((Double)o);
                 } else if (o instanceof Float) {
@@ -269,7 +276,7 @@ public class UsefulUtils {
             TextMessage outMsg = f.createMessage(TextMessage.class);
             JsonObjectBuilder job = Json.createObjectBuilder();
             job.add("msgId", rmo.requestCorrelationId);
-            job.add("message", UsefulUtils.solMsgToJson(msg));
+            job.add("message", UsefulUtils.solaceMsgToJson(msg));
             outMsg.setText(UsefulUtils.prettyPrint(job.build()));
             return outMsg;
         } else if ("dump".equals(rmo.getParam("format"))) {
@@ -281,7 +288,7 @@ public class UsefulUtils {
             TextMessage outMsg = f.createMessage(TextMessage.class);
             JsonObjectBuilder job = Json.createObjectBuilder();
             job.add("msgId", rmo.requestCorrelationId);
-            job.add("message", UsefulUtils.solMsgToJson(msg));
+            job.add("message", UsefulUtils.solaceMsgToJson(msg));
             outMsg.setText(job.build().toString());
             return outMsg;
         }

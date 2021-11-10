@@ -106,8 +106,10 @@ class ConsumerFlowManager implements FlowManager {
 
 
     @Override
-    public boolean hasActiveQueueFlow(String queueName) {
-        return queueToFlowIdMap.containsKey(queueName);
+    public boolean hasActiveFlow(String flowId) {
+        System.out.println(">> flowIdToFlowMap.containsKey?  "+flowId+"  --> "+flowIdToFlowMap.containsKey(flowId));
+        System.out.println(">> flowIdToQueueMap.containsKey?  "+flowId+"  --> "+flowIdToQueueMap.containsKey(flowId));
+        return flowIdToFlowMap.containsKey(flowId);
     }
     
     
