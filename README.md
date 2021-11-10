@@ -66,12 +66,13 @@ SolaceRestQueueConsumer connected, and running. Press [ENTER] to quit.
 Assumes that Solace Message VPN has REST interface exposed on port 9000.
 ```
 curl -u clientUsername:password http://localhost:9000/restQ/bind/q1 -X POST
-
+```
+```
 {"flowId":"5447c6cd-985f-4369-a27b-ce6f503bdafc"}
 
 ```
 
-## Receive one message from queue:
+## Receive one message from queue using flowId:
 
 ### Default compact JSON representation
 ```
