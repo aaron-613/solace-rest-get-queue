@@ -10,15 +10,13 @@ The application is designed to work with a Message VPN in either (Micro)Gateway 
 ## REST API for MicroGateway
 
 ```
-POST     /restQ/bind/<queueName>                --> replies with flowId
+bind()     POST    /restQ/bind/<queueName>                --> replies with flowId
+receive()  GET     /restQ/recv/<flowId>?format=<format>   --> replies with msgId and formatted message
+ackMsg()   DELETE  /restQ/ack/<msgId>
+unbind()   DELETE  /restQ/unbind/<flowId>
 
-GET      /restQ/recv/<flowId>?format=<format>    --> replies with msgId and formatted message
-DELETE   /restQ/unbind/<flowId>
-
-DELETE   /restQ/ack/<msgId>
-
-GET      /restQ/unacked/<flowId>    --> retrieves list of all unacked msgIds on this flow
-GET      /restQ/getMsg/<msgId>      --> retrieves previous unacked message
+           GET      /restQ/unacked/<flowId>    --> retrieves list of all unacked msgIds on this flow
+           GET      /restQ/getMsg/<msgId>      --> retrieves previous unacked message
 ```
 Bind
 Consume
@@ -135,6 +133,7 @@ curl -u clientUsername:password http://localhost:9000/restQ/recv/5447c6cd-985f-4
 curl -u clientUsername:password http://localhost:9000/restQ/recv/5447c6cd-985f-4369-a27b-ce6f503bdafc?format=dump
 
 RestQ msgId:                            8e75adce-d786-4344-af3b-a89b77dbbf7a
+
 Destination:                            Topic 'bridge/testing/A000001MWC/5581561693/Good'
 AppMessageID:                           d7de924928d1f5dd1478e95c7ab2c72e2b1cedd9
 SequenceNumber:                         1
