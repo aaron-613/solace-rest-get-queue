@@ -9,16 +9,17 @@ import java.util.concurrent.ScheduledExecutorService;
 
 interface FlowManager {
     
-    static final int FLOW_TIMEOUT_SEC = 300;  // if this doesn't get an ACK or nextMsg in this time, we'll close the flow
+    static final int FLOW_INACTIVITY_TIMEOUT_SEC = 120;  // if this doesn't get an ACK or nextMsg in this time, we'll close the flow
     static final int FLOW_TRANSPORT_WINDOW_SIZE = 1;
+    static final int FLOW_RECEIVE_MESSAGE_TIMEOUT_MS = 500;
 
     static ScheduledExecutorService pool = Executors.newScheduledThreadPool(1, new DaemonThreadFactory("FlowActivityTimer"));
 
     
     // methods:
     
-    // returns a flowId
-    String connectToQueue(JCSMPSession session, RequestMessageObject rmo)
+    // returns a flow
+    Flow connectToQueue(JCSMPSession session, RequestMessageObject rmo)
             throws OperationNotSupportedException, JCSMPErrorResponseException, JCSMPException;
 
     void unbind(String queueName, String flowId);

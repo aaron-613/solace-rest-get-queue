@@ -66,3 +66,60 @@ Binary Attachment:                      len=23
 
 
 
+
+
+watch strigo training video
+
+
+
+# RestQ Notes
+
+```
+Map queueToFlowId:  queueName -> flowId
+//Map queueToFlow:    queueName -> flow
+
+Map flowIdToFlow:   flowId -> flow
+Map flowIdToQueue:  flowId -> queueName
+```
+
+
+## Bind: POST /restQ/bind/q1
+ - check if queueToFlowId.containsKey(queueName);  // make sure this queue doesn't have bound flow
+    - if YES: return error, include flowId, and magicKey (needed to close flow)
+    - if NO:  bind to queue, add sub to /restQ/*/$flowId return result
+
+
+
+## Timeout:
+ - close() FlowReceiver
+ - leave all maps as is
+
+
+
+## Receive: GET /restQ/recv/$flowId?format=$format
+$flowId = UUID
+$format = [pretty|dump]   optional
+ - check if flowIdToFlow.containsKey(flowId);  // make sure this flow exists
+    - if YES: attempt to receive message
+	   - if SUCCESS: return 200OK + $msgId + actual message
+	   - if NO_MSG: return 200OK + no-message
+	   - if FAIL: probably due to closed closedFlow or disconnection: return error code status
+	
+
+	
+## Ack Message: DELETE /restQ/ack/$flowId?msgId=$msgid
+
+
+
+
+## Unbind Queue / Close Flow: DELETE /restQ/unbind/$flowId?magicKey=$magicKey
+	   
+
+	   
+
+
+
+
+
+
+

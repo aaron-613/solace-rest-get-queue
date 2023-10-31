@@ -1,38 +1,31 @@
 package com.solace.aaron.restQ;
 
+import com.solacesystems.jcsmp.Browser;
+import com.solacesystems.jcsmp.BrowserProperties;
 import com.solacesystems.jcsmp.BytesXMLMessage;
 import com.solacesystems.jcsmp.ClosedFacilityException;
-import com.solacesystems.jcsmp.ConsumerFlowProperties;
-import com.solacesystems.jcsmp.FlowEventArgs;
-import com.solacesystems.jcsmp.FlowEventHandler;
-import com.solacesystems.jcsmp.FlowReceiver;
 import com.solacesystems.jcsmp.JCSMPErrorResponseException;
 import com.solacesystems.jcsmp.JCSMPException;
 import com.solacesystems.jcsmp.JCSMPFactory;
-import com.solacesystems.jcsmp.JCSMPProperties;
 import com.solacesystems.jcsmp.JCSMPSession;
 import com.solacesystems.jcsmp.OperationNotSupportedException;
 import com.solacesystems.jcsmp.Queue;
-import java.io.StringReader;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-import javax.json.Json;
-import javax.json.JsonObject;
-import javax.json.JsonReader;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-class ConsumerFlowManager implements FlowManager {
+class BrowserFlowManager implements FlowManager {
 
 
     private Map<String,String> queueToFlowIdMap = new HashMap<>();
     private Map<String,String> flowIdToQueueMap = new HashMap<>();
-    private Map<String,ConsumerFlow> queueToFlowMap = new HashMap<>();
-    private Map<String,ConsumerFlow> flowIdToFlowMap = new HashMap<>();
+    private Map<String,BrowserFlow> queueToFlowMap = new HashMap<>();
+    private Map<String,BrowserFlow> flowIdToFlowMap = new HashMap<>();
 
     private static final Logger logger = LogManager.getLogger();  // log4j2, but could also use SLF4J, JCL, etc.
     
@@ -45,37 +38,19 @@ class ConsumerFlowManager implements FlowManager {
         String queueName = rmo.resourceName;
         // configure the queue API object locally
         final Queue queue = JCSMPFactory.onlyInstance().createQueue(queueName);
-        // Create a Flow be able to bind to and consume messages from the Queue.
-        final ConsumerFlowProperties flow_prop = new ConsumerFlowProperties();
-        flow_prop.setEndpoint(queue);
-        flow_prop.setAckMode(JCSMPProperties.SUPPORTED_MESSAGE_ACK_CLIENT);  // ACK later manually
-        flow_prop.setTransportWindowSize(FlowManager.FLOW_TRANSPORT_WINDOW_SIZE);  // why not?  REST consumers aren't fast!
-        flow_prop.setActiveFlowIndication(true);
+        
+        BrowserProperties br_prop = new BrowserProperties();
+        br_prop.setEndpoint(queue);
+        br_prop.setTransportWindowSize(FlowManager.FLOW_TRANSPORT_WINDOW_SIZE);
+        br_prop.setWaitTimeout(FlowManager.FLOW_RECEIVE_MESSAGE_TIMEOUT_MS);
         String selector = rmo.getParam("selector");  // might be null if not set
-
-//        if (!rmo.payloadString.isEmpty()) {
-//            JsonReader reader = Json.createReader(new StringReader(rmo.payloadString));
-//            try {
-//                JsonObject json = reader.readObject();
-//                selector = json.getString("selector");
-//            } catch (RuntimeException e) {
-//                throw e;
-//            }
-//        }
-        if (selector != null) flow_prop.setSelector(selector);
-        System.out.printf("Attempting to bind to queue '%s' on the broker.%n", queueName);
-        FlowReceiver flowQueueReceiver = null;
+        if (selector != null) br_prop.setSelector(selector);
+        System.out.printf("Attempting to browse to queue '%s' on the broker.%n", queueName);
+        Browser myBrowser;
         try {
-            flowQueueReceiver = session.createFlow(null, flow_prop, null, new FlowEventHandler() {
-                @Override
-                public void handleEvent(Object source, FlowEventArgs event) {
-                    // ### Type: 'FLOW_RECONNECTED', Info: 'OK', ResponseCode: '200', Exception: 'null'
-                    // ### Type: 'FLOW_ACTIVE', Info: 'Flow becomes active', ResponseCode: '0', Exception: 'null'
-                    System.out.printf("### Flow event for '%s': %s%n",((FlowReceiver)source).getEndpoint(),event);
-                }
-            });  // super basic blocking/sync queue receiver
+            myBrowser = session.createBrowser(br_prop);
             System.out.println("SUCCESS!");
-            ConsumerFlow flow = new ConsumerFlow(queueName, rmo.uuid, flowQueueReceiver);
+            BrowserFlow flow = new BrowserFlow(queueName, rmo.uuid, myBrowser);
             flow.restartTimer();
             queueToFlowIdMap.put(queueName,flow.getFlowId());
             flowIdToQueueMap.put(flow.getFlowId(), queueName);
@@ -101,8 +76,8 @@ class ConsumerFlowManager implements FlowManager {
         assert flowId.equals(queueToFlowIdMap.get(queueName));
         assert queueToFlowMap.get(queueName).equals(flowIdToFlowMap.get(flowId));
         
-        ConsumerFlow flow = flowIdToFlowMap.get(flowId);
-        flow.flowReceiver.close();
+        BrowserFlow flow = flowIdToFlowMap.get(flowId);
+        flow.browser.close();
         queueToFlowIdMap.remove(queueName);  // get rid of queue-mapped objects
         queueToFlowMap.remove(queueName);
         // but leave the flowId-mapped objects just in case
@@ -130,50 +105,38 @@ class ConsumerFlowManager implements FlowManager {
         return queueToFlowIdMap.get(queueName);
     }
     
-    
-//    @Override
-//    public Flow getFlow(String queueName) {
-//        return queueToFlowMap.get(queueName);
-//    }
-
     @Override
     public Flow getFlowFromId(String flowId) {
         return flowIdToFlowMap.get(flowId);
     }
-
-//    @Override
-//    public BytesXMLMessage getUnackedMessage(String queueName, String msgId) {
-//        // checks should already have been done to confirm this queue is legit
-//        assert queueToFlowMap.containsKey(queueName);
-//        return queueToFlowMap.get(queueName).unackedMessages.get(msgId);
-//    }
 
     /**
      * For every FlowReceiver, initiate close()
      */
     @Override
     public void shutdown() {
-        for (ConsumerFlow flow : flowIdToFlowMap.values()) {
-            flow.flowReceiver.close();
+        for (BrowserFlow flow : flowIdToFlowMap.values()) {
+            flow.browser.close();
         }
     }
     
     /////////////////////////////////////////////////
     // INNER CLASS
 
-    private class ConsumerFlow implements Flow {
+    private class BrowserFlow implements Flow {
         
         private final String queueName;             // obvious
         private final String flowId;                                   // the auto-gen flowId, derived from original MicroGateway request correlationid
         private final String magicKey = UUID.randomUUID().toString();  // needed to close the flow
-        private final FlowReceiver flowReceiver;                 // the JCSMP flow receiver to receive messages on
+        private final Browser browser;                 // the JCSMP flow receiver to receive messages on
         private final Map<String,BytesXMLMessage> unackedMessages = new HashMap<>();  // corrID -> message
         private ScheduledFuture<?> futureTask = null;       // timer for inactivity
+        private boolean readOnlyBrowser = true;
 
-        private ConsumerFlow(String queueName, String flowId, FlowReceiver flowReceiver) {
+        private BrowserFlow(String queueName, String flowId, Browser browser) {
             this.queueName = queueName;
             this.flowId = flowId;
-            this.flowReceiver = flowReceiver;
+            this.browser = browser;
         }
 
         @Override
@@ -190,6 +153,7 @@ class ConsumerFlowManager implements FlowManager {
             return magicKey;
         }
         
+        
         private void restartTimer() {
             if (futureTask != null) {
                 futureTask.cancel(true);
@@ -199,10 +163,8 @@ class ConsumerFlowManager implements FlowManager {
 
         @Override
         public void close() {
-            flowReceiver.close();
+            browser.close();
         }
-        
-
         
 
         @Override
@@ -211,9 +173,7 @@ class ConsumerFlowManager implements FlowManager {
             if (unackedMessages.containsKey(newMsgId)) throw new AssertionError("correlation-id already exists!?");
             restartTimer();
             try {
-                flowReceiver.start();
-                BytesXMLMessage msg = flowReceiver.receive(FlowManager.FLOW_RECEIVE_MESSAGE_TIMEOUT_MS);
-                flowReceiver.stop();
+                BytesXMLMessage msg = browser.getNext();
                 if (msg != null) unackedMessages.put(newMsgId, msg);  // track this message for ACKing later
                 logger.debug(unackedMessages.toString());
                 return msg;
